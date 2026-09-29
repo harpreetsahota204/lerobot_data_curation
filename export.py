@@ -8,6 +8,7 @@ source dataset is modified. Episodes tagged ``exclude-candidate`` are left out.
 import datetime
 import json
 import os
+import re
 import shutil
 
 import fiftyone.types as fot
@@ -68,6 +69,18 @@ def build_manifest(dataset, view, kept, excluded_ids, export_dir):
     }
 
 
+def safe_name(text, fallback):
+    """A folder name that cannot climb out of the export directory."""
+    name = re.sub(r"[^\w.-]+", "_", str(text)).strip("._")
+    return name or fallback
+
+
+def is_inside(parent, child):
+    """True when `child` resolves to a path strictly inside `parent`."""
+    parent, child = os.path.realpath(parent), os.path.realpath(child)
+    return child != parent and os.path.commonpath([parent, child]) == parent
+
+
 def _source_of(dataset, view):
     """``{sample_id: (source_id, source_dir)}`` for every episode in the view."""
     dirs = {m["id"]: m.get("dir") or m["id"][-6:] for m in (dataset.media_sources or [])}
@@ -76,6 +89,22 @@ def _source_of(dataset, view):
         source_id = (key or "").rpartition("/")[0]
         out[sid] = (source_id, dirs.get(source_id, source_id[-6:]))
     return out
+
+
+def _remove_partial(export_dir, created):
+    """Removes what a failed export left behind, so the destination can be reused.
+
+    The destination was either absent or empty when we started, so everything in
+    it is ours. An empty folder that already existed is kept.
+    """
+    if not os.path.isdir(export_dir):
+        return
+    if created:
+        shutil.rmtree(export_dir, ignore_errors=True)
+        return
+    for entry in os.listdir(export_dir):
+        path = os.path.join(export_dir, entry)
+        shutil.rmtree(path, ignore_errors=True) if os.path.isdir(path) else os.remove(path)
 
 
 def export_kept(dataset, view, export_dir):
@@ -97,6 +126,7 @@ def export_kept(dataset, view, export_dir):
     export_dir = os.path.abspath(os.path.expanduser(export_dir))
     if os.path.exists(export_dir) and os.listdir(export_dir):
         raise ValueError("Destination %s already exists and is not empty" % export_dir)
+    created = not os.path.exists(export_dir)
 
     kept, excluded_ids = split_kept(view)
     if len(kept) == 0:
@@ -112,20 +142,24 @@ def export_kept(dataset, view, export_dir):
     used = set()
     single = len(by_source) == 1
     for (source_id, source_dir), ids in by_source.items():
-        name = "." if single else source_dir
+        name = "." if single else safe_name(source_dir, source_id[-6:])
         while name in used and not single:  # two sources can share a directory name
-            name = "%s_%s" % (source_dir, source_id[-4:])
+            name = "%s_%s" % (safe_name(source_dir, "source"), source_id[-4:])
         used.add(name)
         target = export_dir if single else os.path.join(export_dir, name)
+        if not single and not is_inside(export_dir, target):
+            failed.append({"source": source_dir, "episodes": len(ids), "error": "unsafe folder name"})
+            continue
         try:
             kept.select(ids).export(export_dir=target, dataset_type=fot.LeRobotDataset, export_media=True)
             exports.append({"path": name, "source": source_dir, "episodes": len(ids)})
         except Exception as e:  # noqa: BLE001 - one unwritable source must not lose the others
             if not single:
-                shutil.rmtree(target, ignore_errors=True)
+                shutil.rmtree(target, ignore_errors=True)  # `target` is verified to be inside export_dir
             failed.append({"source": source_dir, "episodes": len(ids), "error": "%s: %s" % (type(e).__name__, str(e)[:200])})
 
     if not exports:
+        _remove_partial(export_dir, created)
         raise ValueError(
             "LeRobot could not write any of the %d source(s). First error: %s"
             % (len(failed), failed[0]["error"])

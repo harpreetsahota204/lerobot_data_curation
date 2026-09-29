@@ -15,7 +15,7 @@ No double underscores: mongoengine reads ``__`` as a lookup separator.
 - ``lr_score_<profile>``, ``lr_nflags_<profile>``, ``lr_driver_<profile>``,
   ``lr_verdict_<profile>``: profile outputs
 - ``lr_integrity_verdict``, ``lr_language_verdict``
-- ``lr_group``, ``lr_group_basis``, ``lr_group_n``, ``lr_config_version``
+- ``lr_group``, ``lr_group_basis``, ``lr_group_n``, ``lr_config_version``, ``lr_run_id``
 """
 
 import math
@@ -110,14 +110,20 @@ def previous_fields(dataset):
         return []
 
 
-def write_results(dataset, view, results):
+def write_results(dataset, view, results, run_id=None):
     """Writes results for the samples in `view`. Returns the sorted field names.
+
+    `run_id` is stamped on every scored sample (``lr_run_id``) so the panel can tell
+    when a view mixes episodes scored in different runs.
 
     Fields the previous run wrote but this run did not are set to None on the
     scored samples, so a re-run with different settings leaves no stale values.
     Samples outside `view` are untouched.
     """
     flat_by_id = {sid: flatten(r) for sid, r in results.items()}
+    if run_id is not None:
+        for flat in flat_by_id.values():
+            flat["lr_run_id"] = run_id
     fields = declare_fields(dataset, flat_by_id)
     stale = set(previous_fields(dataset)) - set(fields)
     schema = dataset.get_field_schema()
@@ -164,7 +170,7 @@ def set_sidebar_group(dataset, fields):
     dataset.save()
 
 
-def register_run(dataset, config, norm_stats, fields, feature_maps, dataset_checks=None, balance=None):
+def register_run(dataset, config, norm_stats, fields, feature_maps, dataset_checks=None, balance=None, run_id=None):
     """Records what produced this run's scores and the stats needed to reuse them.
 
     Overwrites on every run: this is the dataset's current scoring state, not a
@@ -178,6 +184,7 @@ def register_run(dataset, config, norm_stats, fields, feature_maps, dataset_chec
     results.feature_maps = feature_maps
     results.dataset_checks = dataset_checks or {}
     results.balance = balance or {}
+    results.run_id = run_id
     dataset.save_run_results(RUN_KEY, results, overwrite=True)
 
 

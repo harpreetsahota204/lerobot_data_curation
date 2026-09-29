@@ -5,8 +5,11 @@ by construction (see ``engine.score``), so the unit of work is the whole target
 view: scoring a filtered subset gives z-scores relative to that subset.
 """
 
+import copy
+import hashlib
 import logging
 import os
+import uuid
 from collections import Counter
 
 import fiftyone.operators as foo
@@ -58,6 +61,33 @@ def _feature_map_summary(reader):
             line += " (%s)" % notes[(state, action)]
         lines.append(line)
     return "\n".join(lines)
+
+
+_CHECKS_CACHE = {}
+_CHECKS_CACHE_SIZE = 4
+
+
+def _cached_checks(dataset, reader, samples, overrides):
+    """The inferred dataset checks, cached per (dataset state, episodes, column overrides).
+
+    The compute form re-resolves on every click or keystroke, and inferring the
+    checks reads a few episodes per source. The key includes the dataset's last
+    modification time, so a compute run (which saves the dataset) invalidates it.
+    Returns a copy, because overrides are applied to the result in place.
+    """
+    ids = ",".join(s.id for s in samples)
+    key = (
+        dataset.name,
+        str(getattr(dataset, "last_modified_at", None)),
+        hashlib.md5(ids.encode()).hexdigest(),
+        overrides.get("state_key"),
+        overrides.get("action_key"),
+    )
+    if key not in _CHECKS_CACHE:
+        if len(_CHECKS_CACHE) >= _CHECKS_CACHE_SIZE:
+            _CHECKS_CACHE.pop(next(iter(_CHECKS_CACHE)))
+        _CHECKS_CACHE[key] = dataset_checks.infer_checks(reader, samples)
+    return copy.deepcopy(_CHECKS_CACHE[key])
 
 
 def _metric_rows():
@@ -118,7 +148,9 @@ class ComputeQuality(foo.Operator):
             },
         )
 
-        checks = dataset_checks.infer_checks(reader, list(view.select_fields(["media_reference"])))
+        checks = _cached_checks(
+            ctx.dataset, reader, list(view.select_fields(["media_reference"])), overrides
+        )
         dataset_checks.apply_overrides(
             checks,
             action_semantics=overrides.get("action_semantics"),
@@ -247,7 +279,7 @@ class ComputeQuality(foo.Operator):
         samples = list(view.select_fields(["media_reference"]))
         n = len(samples)
 
-        checks = dataset_checks.infer_checks(reader, samples)
+        checks = _cached_checks(ctx.dataset, reader, samples, overrides)
         dataset_checks.apply_overrides(
             checks,
             action_semantics=overrides.get("action_semantics"),
@@ -280,7 +312,8 @@ class ComputeQuality(foo.Operator):
             )
 
         results, norm_stats = finalize(raws, metric_names, min_group=min_group)
-        fields = write.write_results(ctx.dataset, view, results)
+        run_id = uuid.uuid4().hex[:12]
+        fields = write.write_results(ctx.dataset, view, results, run_id=run_id)
         write.set_sidebar_group(ctx.dataset, fields)
         n_tags = write.write_temporal_tags(view.select(list(results), ordered=False), results)
         write.register_run(
@@ -297,6 +330,7 @@ class ComputeQuality(foo.Operator):
             balance=dataset_checks.balance(
                 [r.task_key for r in raws.values()], [r.source_id for r in raws.values()]
             ),
+            run_id=run_id,
         )
 
         verdicts = Counter(r.profiles["policy"]["verdict"] for r in results.values())

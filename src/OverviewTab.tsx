@@ -19,7 +19,7 @@ const EXPLAINERS = {
     "weak task instruction also forces at least warn. Integrity and Language are separate checks " +
     "that never enter the score. Click a bar to filter the samples panel.",
   tasks:
-    "Episodes per task, largest first. Amber bars are tasks with fewer than 5 episodes. Click a bar to filter to that task.",
+    "Episodes per task, largest first. Amber bars are tasks with too few episodes to normalize on their own. Click a bar to filter to that task.",
   sources: "Episodes, mean score and flagged share per source. Click a row to filter to that source.",
   outliers:
     "Each point is an episode, placed by two outlier detectors fit on its metric z-scores within its group. " +
@@ -131,7 +131,7 @@ export default function OverviewTab(props: {
         <Card title="Episodes per task" subtitle="coverage · click a bar to filter" info={EXPLAINERS.tasks}>
           <CountBars
             items={taskItems}
-            highlight={(name) => (taskCounts.get(name === "(no task)" ? "" : name) ?? 0) < 5}
+            highlight={(name) => (taskCounts.get(name === "(no task)" ? "" : name) ?? 0) < data.under_covered_below}
             onBarClick={(name) => onShow(rows.filter((r) => (r.task || "(no task)") === name).map((r) => r.id), `task '${name.slice(0, 40)}'`)}
           />
         </Card>

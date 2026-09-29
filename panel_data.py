@@ -8,6 +8,7 @@ panel needs exactly one backend call per refresh.
 import math
 
 from .engine import normalize
+from .engine.dataset_checks import UNDER_COVERED
 from .engine.metrics import METRICS
 from .engine.profiles import DEFAULT_PROFILE, GROUPS, PROFILES
 from .write import RUN_KEY
@@ -20,6 +21,12 @@ def _num(value):
         return None
     value = float(value)
     return None if (math.isnan(value) or math.isinf(value)) else value
+
+
+def _display(name, spec):
+    """Signed-z metrics are stored as a z-score. Show the raw value unless the
+    metric is itself a z (its name ends in ``_z``), so a lag reads in ms."""
+    return "raw" if spec["kind"] == "signed_z" and not name.endswith("_z") else "value"
 
 
 def metric_meta():
@@ -39,6 +46,7 @@ def metric_meta():
             "per_signal": spec["per_signal"],
             "opt_in": spec["opt_in"],
             "check": list(spec["check"]) if spec["check"] else None,
+            "display": _display(name, spec),
         }
     return out
 
@@ -60,9 +68,15 @@ def _min_group(config):
         return 20
 
 
-def _warn_thresholds(results, group_labels):
-    """Raw-unit warn thresholds, only when every episode shares one normalization group."""
+def _warn_thresholds(results, group_labels, run_ids):
+    """Raw-unit warn thresholds, only when every episode shares one group and came from the recorded run.
+
+    The normalization stats belong to the last run. Rows scored in an earlier run
+    were measured against different stats, so a threshold drawn from these would mislead.
+    """
     if results is None or len(set(group_labels)) != 1:
+        return {}
+    if len(run_ids) != 1 or run_ids != {getattr(results, "run_id", None)}:
         return {}
     stats_by_key = (getattr(results, "norm_stats", None) or {}).get(group_labels[0])
     if not stats_by_key:
@@ -111,9 +125,11 @@ def build_panel_data(dataset, view):
         "lr_group_basis",
         "lr_group_n",
         "lr_config_version",
+        "lr_run_id",
         "lr_integrity_verdict",
         "lr_language_verdict",
     ]
+    base = [f for f in base if f == "id" or f.split(".")[0] in schema]
     fields = base + [
         f
         for f in profile_fields + value_fields + raw_fields + z_fields + note_fields + per_signal_fields
@@ -133,6 +149,7 @@ def build_panel_data(dataset, view):
         rows.append(
             {
                 "id": get("id"),
+                "run_id": get("lr_run_id"),
                 "episode": "%s / ep %s" % (source_dir.get(source_id, "?"), get("episode_index")),
                 "source": source_dir.get(source_id, "?"),
                 "task": get("task") or "",
@@ -152,7 +169,9 @@ def build_panel_data(dataset, view):
                     for p in PROFILES
                 },
                 "values": {
-                    m: _num(get("lr_%s" % m)) for m in METRICS if "lr_%s" % m in columns and get("lr_%s" % m) is not None
+                    m: _num(get("lr_%s_raw" % m) if _display(m, METRICS[m]) == "raw" and get("lr_%s_raw" % m) is not None else get("lr_%s" % m))
+                    for m in METRICS
+                    if "lr_%s" % m in columns and get("lr_%s" % m) is not None
                 },
                 "raw": {
                     m: _num(get("lr_%s_raw" % m)) for m in METRICS if "lr_%s_raw" % m in columns and get("lr_%s_raw" % m) is not None
@@ -193,7 +212,9 @@ def build_panel_data(dataset, view):
         "profiles": [{"id": p, "label": spec["label"]} for p, spec in PROFILES.items()],
         "default_profile": DEFAULT_PROFILE,
         "tasks": [{"task": t, "n": c} for t, c in sorted(task_counts.items(), key=lambda kv: -kv[1])],
-        "warn_thresholds": _warn_thresholds(results, [r["group"] for r in rows]),
+        "warn_thresholds": _warn_thresholds(results, [r["group"] for r in rows], {r["run_id"] for r in rows}),
+        "mixed_runs": len({r["run_id"] for r in rows}) > 1,
+        "under_covered_below": UNDER_COVERED,
         "balance": getattr(results, "balance", None) or {},
         "min_group": min_group,
         "pooled_count": sum(1 for r in rows if r["group_basis"] == "pooled"),

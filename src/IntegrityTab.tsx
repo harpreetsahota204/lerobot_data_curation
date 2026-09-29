@@ -13,8 +13,8 @@ const EXPLAINERS = {
     "infinite values, near-empty episodes. Fail means broken. Warn means a schema differs from the rest " +
     "of the view. These flags never enter a score. Click a bar to filter the samples panel.",
   coverage:
-    "Episodes per task, largest first. Amber bars are tasks with fewer than 5 episodes, too few to learn " +
-    "from or to normalize on their own. Reported, never scored. Click a bar to filter to that task.",
+    "Episodes per task, largest first. Amber bars are tasks with too few episodes to learn from or to " +
+    "normalize on their own. Reported, never scored. Click a bar to filter to that task.",
   table:
     "Per-episode integrity. The failing-checks column names each check that fired and its value, so you " +
     "know what to inspect. Click a row to inspect the episode.",
@@ -70,7 +70,7 @@ export default function IntegrityTab(props: {
         >
           <CountBars
             items={items}
-            highlight={(name) => (taskCounts.get(name === "(no task)" ? "" : name) ?? 0) < 5}
+            highlight={(name) => (taskCounts.get(name === "(no task)" ? "" : name) ?? 0) < data.under_covered_below}
             onBarClick={(name) =>
               onShow(rows.filter((r) => (r.task || "(no task)") === name).map((r) => r.id), `task '${name.slice(0, 40)}'`)
             }

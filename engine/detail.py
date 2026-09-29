@@ -73,13 +73,8 @@ def flagged_spans(ep):
 
     # acceleration spikes, clustered
     if ep.state is not None and len(ep.state) >= 8 and arm_dims(ep):
-        dims = arm_dims(ep)
-        x = normalized(ep.state, ep.state_range)[:, dims]
-        acc = np.abs(np.diff(x, n=2, axis=0)) * fps**2
-        med = np.median(acc, axis=0)
-        mad = np.median(np.abs(acc - med), axis=0)
-        thr = np.maximum(med + tracking.SPIKE_MAD_K * 1.4826 * mad, tracking.SPIKE_FLOOR)
-        frames = np.flatnonzero(np.any(acc > thr, axis=1))
+        acc = tracking.state_acceleration(ep, arm_dims(ep))
+        frames = np.flatnonzero(np.any(acc > tracking.spike_threshold(acc), axis=1))
         if 0 < len(frames) < 0.3 * len(acc):  # a noisy sensor is not a set of jolts
             start = prev = frames[0]
             clusters = []

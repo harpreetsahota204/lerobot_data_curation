@@ -140,6 +140,15 @@ export default function CurationPanel() {
             </Banner>
           </div>
         )}
+        {data.mixed_runs && (
+          <div style={{ marginBottom: 8 }}>
+            <Banner>
+              This view mixes episodes scored in different runs, so their scores were measured against different
+              populations and warn thresholds are hidden. Re-run <b>compute quality</b> on the whole view to make
+              them comparable.
+            </Banner>
+          </div>
+        )}
         {data.pooled_count > 0 && (
           <div style={{ marginBottom: 8 }}>
             <Banner>

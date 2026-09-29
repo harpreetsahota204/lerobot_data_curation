@@ -36,6 +36,8 @@ export interface MetricMeta {
   kind: "value" | "signed_z" | "flag";
   per_signal: boolean;
   opt_in: boolean;
+  /** "raw" when the panel shows the raw value of a signed-z metric (for example lag in ms) */
+  display: "raw" | "value";
   /** integrity checks only: [level, threshold]; the verdict gets `level` when the value exceeds it */
   check: [string, number] | null;
 }
@@ -60,6 +62,8 @@ export interface PanelData {
   balance: Balance;
   min_group: number;
   pooled_count: number;
+  mixed_runs: boolean;
+  under_covered_below: number;
   warn_z: number;
   fail_z: number;
   config_version_mismatch: boolean;

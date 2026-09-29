@@ -43,6 +43,19 @@ def _lag_samples(ep):
     return best if scores[best] >= MIN_LAG_CORR else None
 
 
+def state_acceleration(ep, dims):
+    """|acceleration| of the range-normalized state per frame and arm joint, in range-fractions per s^2."""
+    x = normalized(ep.state, ep.state_range)[:, dims]
+    return np.abs(np.diff(x, n=2, axis=0)) * ep.fps**2
+
+
+def spike_threshold(acc):
+    """Per-joint spike threshold: ``median + k x MAD`` of that joint's own |acceleration|, with a floor."""
+    median = np.median(acc, axis=0)
+    mad = np.median(np.abs(acc - median), axis=0)
+    return np.maximum(median + SPIKE_MAD_K * 1.4826 * mad, SPIKE_FLOOR)
+
+
 def track_lag_ms(ep):
     """Delay between the commanded action and the achieved state, in milliseconds."""
     if not shares_joint_space(ep):
@@ -87,12 +100,8 @@ def accel_spike_frac(ep):
     dims = arm_dims(ep)
     if len(ep.state) < 8 or not dims:
         return {}
-    x = normalized(ep.state, ep.state_range)[:, dims]
-    acc = np.abs(np.diff(x, n=2, axis=0)) * ep.fps**2
-    median = np.median(acc, axis=0)
-    mad = np.median(np.abs(acc - median), axis=0)
-    threshold = np.maximum(median + SPIKE_MAD_K * 1.4826 * mad, SPIKE_FLOOR)
-    return {"": MV(float(np.mean(np.any(acc > threshold, axis=1))))}
+    acc = state_acceleration(ep, dims)
+    return {"": MV(float(np.mean(np.any(acc > spike_threshold(acc), axis=1))))}
 
 
 def joint_limit_frac(ep):
