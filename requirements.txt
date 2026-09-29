@@ -1,0 +1,6 @@
+numpy
+scipy
+scikit-learn
+pyarrow
+av
+opencv-python-headless

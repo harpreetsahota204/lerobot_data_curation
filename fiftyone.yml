@@ -1,0 +1,24 @@
+name: lerobot-data-curation
+type: plugin
+author: Harpreet Sahota
+version: 0.0.1
+license: Apache 2.0
+description: >-
+  Episode- and interval-level curation for LeRobot v3 datasets used to train
+  VLA / imitation-learning policies. Scores motion, action, integrity, vision
+  and language quality per episode, ranks episodes worst-first, and exports the
+  curated subset back to LeRobot format.
+fiftyone:
+  version: ">=1.22"
+operators:
+  - lr_compute_quality
+  - lr_export_kept
+  - lr_get_panel_data
+  - lr_get_episode_detail
+  - lr_open_episode
+  - lr_tag_episodes
+  - lr_show_episodes
+  - lr_prompt_compute
+  - lr_prompt_export
+panels:
+  - lerobot_curation_panel
