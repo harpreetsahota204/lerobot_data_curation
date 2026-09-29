@@ -1,6 +1,7 @@
 import React from "react";
 import { CountBars, histogram, inBin, OutlierScatter, ScoreHistogram, VerdictBar } from "./charts";
 import { fmt, theme, verdictColor } from "./theme";
+import { ExpandToggle } from "./MetricGrid";
 import { Card, Chip, DataTable } from "./ui";
 import { HistogramBar, PanelData, Row } from "./types";
 
@@ -20,7 +21,20 @@ const EXPLAINERS = {
     "that never enter the score. Click a bar to filter the samples panel.",
   tasks:
     "Episodes per task, largest first. Amber bars are tasks with too few episodes to normalize on their own. Click a bar to filter to that task.",
-  sources: "Episodes, mean score and flagged share per source. Click a row to filter to that source.",
+  sources: "Episodes, mean score and flagged count per source. Click a row to filter to that source.",
+  meanScore:
+    "The average of the selected profile's score over this source's episodes in the current view. The score " +
+    "is each episode's worst metric-group z-score (higher is worse), so a source with a few very bad episodes " +
+    "can show a high mean. Read it with the Warn or fail column. Episodes without a score are left out. " +
+    "Scores are measured against each episode's own task, or against the whole view for small tasks, so " +
+    "comparing sources also compares what tasks and robots they contain.",
+  score:
+    "The selected profile's score: for each metric group (motion, time, tracking, gripper, consistency) take " +
+    "the worst weighted robust z-score of its metrics, then take the highest group value. It is a worst-of, " +
+    "never an average, so one failing group is not diluted by the others. A z-score is how many robust " +
+    "standard deviations worse than typical an episode is, measured against its own task when that task has " +
+    "enough episodes, otherwise against the whole view (marked with *). Amber is 2 or more (warn), red is 3 or " +
+    "more (fail). Integrity, Language and outlier scores never enter it.",
   outliers:
     "Each point is an episode, placed by two outlier detectors fit on its metric z-scores within its group. " +
     "X: isolation-forest score (higher = more anomalous). Y: mean distance to its nearest neighbors. Red points " +
@@ -55,6 +69,12 @@ export default function OverviewTab(props: {
   selectedId: string | null;
 }) {
   const { data, rows, profile, onSelect, onOpen, onShow, selectedId } = props;
+  // One chart can take the whole row, like the histograms on the Motion & Action tab.
+  const [expanded, setExpanded] = React.useState<string | null>(null);
+  const toggle = (id: string) => (
+    <ExpandToggle expanded={expanded === id} onClick={() => setExpanded(expanded === id ? null : id)} />
+  );
+  const show = (id: string) => expanded === null || expanded === id;
   const profileLabel = data.profiles.find((p) => p.id === profile)?.label ?? profile;
 
   const scored = rows.filter((r) => r.profiles[profile]?.score != null);
@@ -94,9 +114,17 @@ export default function OverviewTab(props: {
       <div style={{ fontSize: 11, color: theme.textDim }}>
         click any bar to filter the samples panel · dashed lines = warn and fail thresholds
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: expanded ? "1fr" : "repeat(auto-fit, minmax(300px, 1fr))",
+          gap: 12,
+        }}
+      >
+        {show("score") && (
         <Card
           title="Profile score"
+          action={toggle("score")}
           subtitle={`${profileLabel} · higher is worse · warn ≥ ${data.warn_z} · fail ≥ ${data.fail_z}`}
           info={EXPLAINERS.histogram}
         >
@@ -105,11 +133,13 @@ export default function OverviewTab(props: {
               No scored episodes in this view
             </div>
           ) : (
-            <ScoreHistogram bars={bars} warn={data.warn_z} fail={data.fail_z} xLabel="profile score (worst-of z)" height={220} onBarClick={onBar} />
+            <ScoreHistogram bars={bars} warn={data.warn_z} fail={data.fail_z} xLabel="profile score (worst-of z)" height={expanded === "score" ? 440 : 220} onBarClick={onBar} />
           )}
         </Card>
+        )}
 
-        <Card title="Verdicts" subtitle="profile · integrity · language · click a bar to filter" info={EXPLAINERS.verdicts}>
+        {show("verdicts") && (
+        <Card title="Verdicts" subtitle="profile · integrity · language · click a bar to filter" info={EXPLAINERS.verdicts} action={toggle("verdicts")}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
             {[
               { title: "profile", counts: verdicts, pick: (r: Row) => r.profiles[profile]?.verdict ?? "unknown" },
@@ -120,25 +150,29 @@ export default function OverviewTab(props: {
                 <div style={{ fontSize: 11, color: theme.textDim, textAlign: "center" }}>{v.title}</div>
                 <VerdictBar
                   counts={v.counts}
-                  height={190}
+                  height={expanded === "verdicts" ? 400 : 190}
                   onBarClick={(verdict) => onShow(rows.filter((r) => v.pick(r) === verdict).map((r) => r.id), `${v.title} '${verdict}'`)}
                 />
               </div>
             ))}
           </div>
         </Card>
+        )}
 
-        <Card title="Episodes per task" subtitle="coverage · click a bar to filter" info={EXPLAINERS.tasks}>
+        {show("tasks") && (
+        <Card title="Episodes per task" subtitle="coverage · click a bar to filter" info={EXPLAINERS.tasks} action={toggle("tasks")}>
           <CountBars
             items={taskItems}
+            height={expanded === "tasks" ? 440 : 240}
             highlight={(name) => (taskCounts.get(name === "(no task)" ? "" : name) ?? 0) < data.under_covered_below}
             onBarClick={(name) => onShow(rows.filter((r) => (r.task || "(no task)") === name).map((r) => r.id), `task '${name.slice(0, 40)}'`)}
           />
         </Card>
+        )}
 
-        {hasOutliers && (
-          <Card title="Outliers" subtitle="information only · click a point to inspect it" info={EXPLAINERS.outliers}>
-            <OutlierScatter rows={rows} onOpen={onSelect} />
+        {hasOutliers && show("outliers") && (
+          <Card title="Outliers" subtitle="information only · click a point to inspect it" info={EXPLAINERS.outliers} action={toggle("outliers")}>
+            <OutlierScatter rows={rows} onOpen={onSelect} height={expanded === "outliers" ? 440 : 260} />
           </Card>
         )}
       </div>
@@ -148,7 +182,7 @@ export default function OverviewTab(props: {
           columns={[
             { key: "source", label: "Source" },
             { key: "n", label: "Episodes", align: "right" },
-            { key: "mean", label: "Mean score", align: "right" },
+            { key: "mean", label: "Mean score", align: "right", info: EXPLAINERS.meanScore },
             { key: "flagged", label: "Warn or fail", align: "right" },
           ]}
           rowKeys={sourceRows.map((s) => s.source)}
@@ -162,7 +196,7 @@ export default function OverviewTab(props: {
           columns={[
             { key: "episode", label: "Episode" },
             { key: "task", label: "Task" },
-            { key: "score", label: "Score", align: "right" },
+            { key: "score", label: "Score", align: "right", info: EXPLAINERS.score },
             { key: "flags", label: "Flags", align: "right" },
             { key: "driver", label: "Driver" },
             { key: "integrity", label: "Integrity" },

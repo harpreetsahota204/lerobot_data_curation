@@ -224,7 +224,8 @@ const cellStyle: React.CSSProperties = {
 };
 
 export function DataTable(props: {
-  columns: { key: string; label: string; align?: "left" | "right" }[];
+  /** `info` adds an "i" tooltip next to the column header */
+  columns: { key: string; label: string; align?: "left" | "right"; info?: string }[];
   rows: Record<string, React.ReactNode>[];
   rowKeys: string[];
   onRowClick: (key: string) => void;
@@ -254,6 +255,7 @@ export function DataTable(props: {
                 }}
               >
                 {col.label}
+                {col.info && <InfoTip text={col.info} />}
               </th>
             ))}
           </tr>
