@@ -98,7 +98,7 @@ The footer tags episodes `review`, `exclude-candidate` or `relabel` (the selecti
 Run from the folder that contains `lerobot_data_curation/`:
 
 ```bash
-python -m unittest lerobot_data_curation.tests.test_engine lerobot_data_curation.tests.test_reader lerobot_data_curation.tests.test_harness
+python -m unittest discover -s lerobot_data_curation/tests -t .    # 115 tests, about 12 seconds
 python -m lerobot_data_curation.harness.run_harness --dataset <your dataset>   # writes harness/REPORT.md
 ```
 
