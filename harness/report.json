@@ -1,0 +1,266 @@
+{
+  "corruptions": [
+    {
+      "corruption": "identity",
+      "metric": "(every metric, worst case)",
+      "pairs": 102,
+      "rate": 0.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "jitter",
+      "metric": "ldlj",
+      "pairs": 100,
+      "rate": 0.88,
+      "status": "pass"
+    },
+    {
+      "corruption": "stop_and_go",
+      "metric": "sparc",
+      "pairs": 100,
+      "rate": 0.91,
+      "status": "pass"
+    },
+    {
+      "corruption": "stop_and_go",
+      "metric": "ldlj",
+      "pairs": 100,
+      "rate": 0.83,
+      "status": "pass"
+    },
+    {
+      "corruption": "wander",
+      "metric": "path_length_z",
+      "pairs": 100,
+      "rate": 0.96,
+      "status": "pass"
+    },
+    {
+      "corruption": "idle_start",
+      "metric": "idle_lead_s",
+      "pairs": 100,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "idle_end",
+      "metric": "idle_trail_s",
+      "pairs": 100,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "mid_pause",
+      "metric": "longest_pause_s",
+      "pairs": 100,
+      "rate": 0.93,
+      "status": "pass"
+    },
+    {
+      "corruption": "cut_off",
+      "metric": "end_motion_ratio",
+      "pairs": 72,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "abandoned",
+      "metric": "length_z",
+      "pairs": 100,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "duplicate_frame",
+      "metric": "frame_gaps",
+      "pairs": 102,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "nan",
+      "metric": "nonfinite_values",
+      "pairs": 100,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "one_frame",
+      "metric": "too_short",
+      "pairs": 100,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "generic_task",
+      "metric": "task_generic",
+      "pairs": 102,
+      "rate": 0.9803921568627451,
+      "status": "pass"
+    },
+    {
+      "corruption": "missing_task",
+      "metric": "task_missing",
+      "pairs": 102,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "length_mismatch",
+      "metric": "length_mismatch",
+      "pairs": 102,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "video_off",
+      "metric": "video_window_mismatch",
+      "pairs": 102,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "stalled_joint",
+      "metric": "track_resid",
+      "pairs": 86,
+      "rate": 0.9534883720930233,
+      "status": "pass"
+    },
+    {
+      "corruption": "lagged_state",
+      "metric": "track_lag_ms",
+      "pairs": 86,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "jolts",
+      "metric": "accel_spike_frac",
+      "pairs": 100,
+      "rate": 0.97,
+      "status": "pass"
+    },
+    {
+      "corruption": "at_limits",
+      "metric": "joint_limit_frac",
+      "pairs": 98,
+      "rate": 1.0,
+      "status": "pass"
+    },
+    {
+      "corruption": "gripper_chatter",
+      "metric": "gripper_flips_per_s",
+      "pairs": 70,
+      "rate": 1.0,
+      "status": "pass"
+    }
+  ],
+  "flag_baseline": {
+    "recovery_count": 0.12857142857142856,
+    "frame_gaps": 0.0,
+    "length_mismatch": 0.0,
+    "video_window_mismatch": 0.00980392156862745,
+    "nonfinite_values": 0.0,
+    "too_short": 0.0,
+    "schema_mismatch": 0.0,
+    "task_missing": 0.0,
+    "task_generic": 0.0196078431372549
+  },
+  "length": {
+    "common_duration_s": 11.04,
+    "episodes": 91,
+    "rows": [
+      {
+        "metric": "sparc",
+        "n": 91,
+        "rho_kept": 0.8128045867176303,
+        "rho_length": 0.1700292662651629,
+        "status": "ok"
+      },
+      {
+        "metric": "ldlj",
+        "n": 91,
+        "rho_kept": 0.9478260869565218,
+        "rho_length": 0.013139819649548912,
+        "status": "ok"
+      },
+      {
+        "metric": "sparc_phase",
+        "n": 57,
+        "rho_kept": 0.8249287010630024,
+        "rho_length": 0.5403889891507261,
+        "status": "ok"
+      },
+      {
+        "metric": "idle_lead_s",
+        "n": 91,
+        "rho_kept": 0.9341253709853253,
+        "rho_length": 0.0709281893322272,
+        "status": "ok"
+      },
+      {
+        "metric": "idle_trail_s",
+        "n": 91,
+        "rho_kept": 0.39312002498696996,
+        "rho_length": 0.01766155695742851,
+        "status": "not judged: measures the end, which truncation removes"
+      },
+      {
+        "metric": "longest_pause_s",
+        "n": 91,
+        "rho_kept": 0.5987190976008221,
+        "rho_length": 0.19183915576700758,
+        "status": "ok"
+      },
+      {
+        "metric": "end_motion_ratio",
+        "n": 91,
+        "rho_kept": 0.1352927826606625,
+        "rho_length": 0.05390134751789046,
+        "status": "not judged: measures the end, which truncation removes"
+      },
+      {
+        "metric": "track_resid",
+        "n": 79,
+        "rho_kept": 0.8836750729902979,
+        "rho_length": -0.010468400066872257,
+        "status": "ok"
+      },
+      {
+        "metric": "accel_spike_frac",
+        "n": 91,
+        "rho_kept": 0.9635713240674262,
+        "rho_length": -0.07474218708160854,
+        "status": "ok"
+      },
+      {
+        "metric": "joint_limit_frac",
+        "n": 90,
+        "rho_kept": 0.8014620381167094,
+        "rho_length": -0.09085295601350538,
+        "status": "ok"
+      },
+      {
+        "metric": "gripper_flips_per_s",
+        "n": 57,
+        "rho_kept": 0.7984066695846691,
+        "rho_length": -0.3763432206199408,
+        "status": "ok"
+      },
+      {
+        "metric": "missed_grasp_frac",
+        "n": 47,
+        "rho_kept": 0.8332443103966051,
+        "rho_length": -0.07982139828677833,
+        "status": "ok"
+      },
+      {
+        "metric": "action_divergence",
+        "n": 0,
+        "rho_kept": null,
+        "rho_length": null,
+        "status": "too few episodes"
+      }
+    ]
+  }
+}
