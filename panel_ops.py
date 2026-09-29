@@ -169,15 +169,3 @@ class GetEpisodeDetail(foo.Operator):
                     )
         detail["thumbnails"] = thumbs
         return detail
-
-
-class PromptExport(foo.Operator):
-    """Opens the export form from the panel footer."""
-
-    @property
-    def config(self):
-        return foo.OperatorConfig(name="lr_prompt_export", unlisted=True)
-
-    def execute(self, ctx):
-        ctx.trigger("lerobot-data-curation/lr_export_kept")
-        return {}

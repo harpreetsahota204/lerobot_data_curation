@@ -1,5 +1,6 @@
 import React from "react";
 import { CountBars, VerdictBar } from "./charts";
+import { ExpandToggle } from "./MetricGrid";
 import { fmt, theme, verdictColor } from "./theme";
 import { Card, Chip, DataTable } from "./ui";
 import { label, PanelData, Row } from "./types";
@@ -40,6 +41,12 @@ export default function IntegrityTab(props: {
   selectedId: string | null;
 }) {
   const { data, rows, onSelect, onShow, selectedId } = props;
+  // One chart can take the whole row, like the charts on the Overview and Motion & Action tabs.
+  const [expanded, setExpanded] = React.useState<string | null>(null);
+  const toggle = (id: string) => (
+    <ExpandToggle expanded={expanded === id} onClick={() => setExpanded(expanded === id ? null : id)} />
+  );
+  const show = (id: string) => expanded === null || expanded === id;
 
   const counts: Record<string, number> = { pass: 0, warn: 0, fail: 0, unknown: 0 };
   for (const r of rows) counts[r.integrity] = (counts[r.integrity] ?? 0) + 1;
@@ -56,26 +63,38 @@ export default function IntegrityTab(props: {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
-        <Card title="Integrity verdicts" subtitle="fail: a check failed · warn: schema differs · click a bar to filter" info={EXPLAINERS.verdicts}>
-          <VerdictBar
-            counts={counts}
-            onBarClick={(verdict) => onShow(rows.filter((r) => r.integrity === verdict).map((r) => r.id), `integrity '${verdict}'`)}
-          />
-        </Card>
-        <Card
-          title="Coverage: episodes per task"
-          subtitle={`${data.balance.under_covered?.length ?? 0} under-covered task(s) · click a bar to filter`}
-          info={EXPLAINERS.coverage}
-        >
-          <CountBars
-            items={items}
-            highlight={(name) => (taskCounts.get(name === "(no task)" ? "" : name) ?? 0) < data.under_covered_below}
-            onBarClick={(name) =>
-              onShow(rows.filter((r) => (r.task || "(no task)") === name).map((r) => r.id), `task '${name.slice(0, 40)}'`)
-            }
-          />
-        </Card>
+      <div style={{ display: "grid", gridTemplateColumns: expanded ? "1fr" : "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
+        {show("verdicts") && (
+          <Card
+            title="Integrity verdicts"
+            subtitle="fail: a check failed · warn: schema differs · click a bar to filter"
+            info={EXPLAINERS.verdicts}
+            action={toggle("verdicts")}
+          >
+            <VerdictBar
+              counts={counts}
+              height={expanded === "verdicts" ? 440 : 220}
+              onBarClick={(verdict) => onShow(rows.filter((r) => r.integrity === verdict).map((r) => r.id), `integrity '${verdict}'`)}
+            />
+          </Card>
+        )}
+        {show("coverage") && (
+          <Card
+            title="Coverage: episodes per task"
+            subtitle={`${data.balance.under_covered?.length ?? 0} under-covered task(s) · click a bar to filter`}
+            info={EXPLAINERS.coverage}
+            action={toggle("coverage")}
+          >
+            <CountBars
+              items={items}
+              height={expanded === "coverage" ? 440 : 240}
+              highlight={(name) => (taskCounts.get(name === "(no task)" ? "" : name) ?? 0) < data.under_covered_below}
+              onBarClick={(name) =>
+                onShow(rows.filter((r) => (r.task || "(no task)") === name).map((r) => r.id), `task '${name.slice(0, 40)}'`)
+              }
+            />
+          </Card>
+        )}
       </div>
 
       <Card title="Episodes per source" subtitle={`${sources.length} source(s)${data.balance.dominant_sources?.length ? " · one source holds more than half" : ""}`}>

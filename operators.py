@@ -8,7 +8,6 @@ view: scoring a filtered subset gives z-scores relative to that subset.
 import copy
 import hashlib
 import logging
-import os
 import uuid
 from collections import Counter
 
@@ -366,93 +365,4 @@ class ComputeQuality(foo.Operator):
         if r.get("metric_failures"):
             lines.append("Metric errors: %s" % r["metric_failures"])
         outputs.str("summary", label="Result", view=types.MarkdownView(), default="\n\n".join(lines))
-        return types.Property(outputs)
-
-
-class ExportKept(foo.Operator):
-    """Exports the kept episodes of the target view back to LeRobot format.
-
-    Episodes tagged ``exclude-candidate`` are left out. A view that spans several
-    sources is exported as one dataset per source. A curation manifest (scores,
-    settings, excluded ids, original task strings) is written next to the export.
-    The source dataset is never modified.
-    """
-
-    @property
-    def config(self):
-        return foo.OperatorConfig(
-            name="lr_export_kept",
-            label="LeRobot curation: export kept view",
-            description="Export the episodes not tagged exclude-candidate as LeRobot v3 datasets, with a curation manifest.",
-            dynamic=True,
-            allow_immediate_execution=True,
-            allow_delegated_execution=True,
-            default_choice_to_delegated=True,
-        )
-
-    def resolve_input(self, ctx):
-        from .export import EXCLUDE_TAG
-
-        inputs = types.Object()
-        if not _is_lerobot(ctx.dataset):
-            inputs.view("not_lerobot", types.Warning(label="This dataset has no LeRobot episodes."))
-            return types.Property(inputs)
-
-        view = ctx.target_view()
-        excluded = len(view.match_tags(EXCLUDE_TAG))
-        sources = {k.rpartition("/")[0] for k in view.match_tags(EXCLUDE_TAG, bool=False).values("media_reference.key")}
-        inputs.str(
-            "export_dir",
-            label="Destination folder",
-            description="Must not exist yet or must be empty.",
-            default=os.path.expanduser(os.path.join("~", "lerobot_curated", ctx.dataset.name)),
-            required=True,
-        )
-        inputs.view(
-            "summary",
-            types.Notice(
-                label=(
-                    "%d episode(s) in view · %d tagged %s will be left out · %d kept from %d source(s)"
-                    "%s. Media is copied, so this can take a while and needs disk space."
-                )
-                % (
-                    len(view),
-                    excluded,
-                    EXCLUDE_TAG,
-                    len(view) - excluded,
-                    len(sources),
-                    " (one dataset per source)" if len(sources) > 1 else "",
-                )
-            ),
-        )
-        return types.Property(inputs, view=types.View(label="LeRobot curation: export kept view"))
-
-    def execute(self, ctx):
-        from .export import export_kept
-
-        return export_kept(ctx.dataset, ctx.target_view(), ctx.params["export_dir"])
-
-    def resolve_output(self, ctx):
-        outputs = types.Object()
-        r = ctx.results or {}
-        outputs.str(
-            "summary",
-            label="Result",
-            view=types.MarkdownView(),
-            default=(
-                "**Exported %d episode(s)** into %d dataset(s) at `%s`.\n\n%d episode(s) were left out. "
-                "The manifest is `%s`.%s"
-                % (
-                    r.get("kept", 0),
-                    r.get("datasets", 0),
-                    r.get("export_dir", ""),
-                    r.get("excluded", 0),
-                    r.get("manifest", ""),
-                    "".join(
-                        "\n\nSkipped source `%s` (%d episode(s)): %s" % (f["source"], f["episodes"], f["error"])
-                        for f in r.get("failed", [])
-                    ),
-                )
-            ),
-        )
         return types.Property(outputs)

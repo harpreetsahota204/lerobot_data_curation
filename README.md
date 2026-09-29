@@ -1,6 +1,6 @@
 # LeRobot Data Curation
 
-A FiftyOne plugin that ranks the episodes of a LeRobot v3 dataset worst-first, so you know which to look at before training a policy or fine-tuning a VLA on them. It scores each episode on motion smoothness, time efficiency, tracking, gripper behavior, consistency, integrity and language, shows the results in a panel, and exports the episodes you keep.
+A FiftyOne plugin that ranks the episodes of a LeRobot v3 dataset worst-first, so you know which to look at before training a policy or fine-tuning a VLA on them. It scores each episode on motion smoothness, time efficiency, tracking, gripper behavior, consistency, integrity and language, and shows the results in a panel.
 
 **Use it to decide where to look first. Do not use it as an automatic accept/reject gate.** A smooth, well-timed episode can still show the wrong task, and detection accuracy has not been shown to predict policy quality (see [METRICS.md](METRICS.md), Evidence). The scores order your review queue. A person decides.
 
@@ -11,7 +11,7 @@ Status: phase 1 (everything that needs no video decoding) is built. Vision metri
 - [Install](#install)
 - [Score a dataset](#score-a-dataset)
 - [The panel](#the-panel)
-- [Tag, then export](#tag-then-export)
+- [Tagging](#tagging)
 - [Limits](#limits)
 - [Develop and validate](#develop-and-validate)
 - [Design documents](#design-documents)
@@ -73,15 +73,9 @@ Click any bar to filter the samples grid to those episodes. Click any row to ope
 
 Flagged spans (idle stretches, the longest pause, the roughest smoothness window, acceleration spikes, regrasp recoveries) are also written as temporal tags on each episode's timeline, so you can scrub straight to them.
 
-## Tag, then export
+## Tagging
 
-The footer tags episodes `review`, `exclude-candidate` or `relabel` (the selection, or everything in view when nothing is selected). Nothing is deleted or hidden; `exclude-candidate` is a tag you act on later.
-
-**Export kept view** writes every episode not tagged `exclude-candidate` back to LeRobot v3 format, plus `curation_manifest.json` (scores, settings, excluded ids, original task strings). The source dataset is never modified.
-
-- A view spanning several sources is exported as one dataset per source, in subfolders, because FiftyOne's exporter will not mix sources.
-- Export copies frames through LeRobot, which is slow and needs disk space on high-resolution data (gigabytes of temporary frames for a couple of episodes).
-- A source LeRobot cannot write is skipped and listed in the manifest.
+The footer tags episodes `review`, `exclude-candidate` or `relabel` (the selection, or everything in view when nothing is selected). Nothing is deleted or hidden. The tags are ordinary FiftyOne sample tags, so you can filter on them, or act on them with your own code or another FiftyOne workflow.
 
 ## Limits
 

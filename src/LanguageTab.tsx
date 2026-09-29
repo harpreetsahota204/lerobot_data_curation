@@ -1,5 +1,6 @@
 import React from "react";
 import { VerdictBar } from "./charts";
+import { ExpandToggle } from "./MetricGrid";
 import { theme, verdictColor } from "./theme";
 import { Card, Chip, DataTable } from "./ui";
 import { PanelData, Row } from "./types";
@@ -25,6 +26,7 @@ export default function LanguageTab(props: {
   selectedId: string | null;
 }) {
   const { rows, onSelect, onShow, selectedId } = props;
+  const [expanded, setExpanded] = React.useState(false);
   const counts: Record<string, number> = { pass: 0, warn: 0, unknown: 0 };
   for (const r of rows) counts[r.language] = (counts[r.language] ?? 0) + 1;
   const sorted = [...rows].sort((a, b) => Number(b.language === "warn") - Number(a.language === "warn"));
@@ -37,10 +39,16 @@ export default function LanguageTab(props: {
           proposed task rewrites and Accept / Reject arrive with phase 3, which is on hold.
         </div>
       </Card>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
-        <Card title="Language verdicts" subtitle="warn: weak or missing task string · click a bar to filter" info={EXPLAINERS.verdicts}>
+      <div style={{ display: "grid", gridTemplateColumns: expanded ? "1fr" : "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
+        <Card
+          title="Language verdicts"
+          subtitle="warn: weak or missing task string · click a bar to filter"
+          info={EXPLAINERS.verdicts}
+          action={<ExpandToggle expanded={expanded} onClick={() => setExpanded(!expanded)} />}
+        >
           <VerdictBar
             counts={counts}
+            height={expanded ? 440 : 220}
             onBarClick={(verdict) => onShow(rows.filter((r) => r.language === verdict).map((r) => r.id), `language '${verdict}'`)}
           />
         </Card>

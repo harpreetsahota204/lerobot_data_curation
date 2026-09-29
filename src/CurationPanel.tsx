@@ -35,7 +35,6 @@ export default function CurationPanel() {
   const tagOp = useOperatorExecutor(`${PLUGIN}/lr_tag_episodes`);
   const showOp = useOperatorExecutor(`${PLUGIN}/lr_show_episodes`);
   const promptOp = useOperatorExecutor(`${PLUGIN}/lr_prompt_compute`);
-  const exportOp = useOperatorExecutor(`${PLUGIN}/lr_prompt_export`);
 
   const view = useRecoilValue(fos.view);
   const selected = useRecoilValue(fos.selectedSamples);
@@ -261,7 +260,6 @@ export default function CurationPanel() {
           {rows.length} scored episode(s) shown
         </span>
         <Button label="Refresh" onClick={() => dataOp.execute({})} />
-        <Button label="Export kept view" primary onClick={() => exportOp.execute({})} />
       </div>
     </div>
   );

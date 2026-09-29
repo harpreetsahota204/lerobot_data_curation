@@ -109,7 +109,7 @@ The checks in `engine/dataset_checks.py` infer an assumption from a few episodes
 ## Tests
 
 - Unit tests use synthetic episodes (`tests/helpers.py`: `make_episode`, `smooth_action`). Use the standard library `unittest`; no extra packages are needed.
-- Run everything from the folder that contains `lerobot_data_curation/` with `python -m unittest discover -s lerobot_data_curation/tests -t .`. Most tests use synthetic episodes; `test_write.py` uses a temporary FiftyOne dataset of plain samples and `test_export.py` uses stand-in views.
+- Run everything from the folder that contains `lerobot_data_curation/` with `python -m unittest discover -s lerobot_data_curation/tests -t .`. Most tests use synthetic episodes; `test_write.py` uses a temporary FiftyOne dataset of plain samples.
 
 ## Two gotchas
 

@@ -68,6 +68,11 @@ function InfoTip(props: { text: string }) {
             fontStyle: "normal",
             boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
             whiteSpace: "normal",
+            // Reset what the tooltip would inherit from a right-aligned or
+            // uppercase table header.
+            textAlign: "left",
+            textTransform: "none",
+            letterSpacing: "normal",
           }}
         >
           {props.text}
