@@ -86,6 +86,20 @@ Each scored motion metric also has a worst-window value, so one bad stretch is n
 | `action_divergence` | Variance of `action` among the nearest `state` neighbors in other episodes of the same group | High means the demonstration takes a different action from peers in a similar state. Needs enough episodes in the group. Similar states can legitimately need different actions, so treat it as a review signal |
 | `stats_leverage` (never scored) | How many feature dimensions this episode alone stretches beyond the rest of the dataset's `meta/stats.json` bounds | High means this episode distorts the normalization every training run will use |
 
+## Camera
+
+Opt-in: they decode video, so they are off until you tick them on the Camera tab of the Compute quality form (the Vision tab's button opens it there). Each is pixel or signal arithmetic on a few decoded frames, with no model. Every value is stored per camera (`cam_<last part of the camera key>`) and compared with the same camera in other episodes, so a wrist camera is never judged against a top camera. The episode's value is its worst camera.
+
+| Metric | What it measures | How to read it |
+|---|---|---|
+| `blur` | A low percentile (10th) of the Laplacian variance over 12 sampled frames, measured at a fixed size (longer side 480 px) and reported as `log10(1 + variance)` | Lower is blurrier. The log scale is there because raw variance is heavy-tailed and a blurry camera would never stand out from the long tail of sharp ones |
+| `exposure_err` | Distance of the mean luminance from mid-gray, from 0 (mid-gray) to 1 (black or white). Median over the sampled frames | High means too dark or too bright. A scene that is dark by design reads as high, which is why it is compared with the same camera elsewhere |
+| `clipped_frac` | Share of pixels at pure black or pure white, averaged over the sampled frames | High means blown highlights or crushed shadows. Black borders count as clipped, which the per-camera comparison absorbs |
+| `frozen_frac` | Of 6 short bursts, the share in which the frames are nearly identical (largest mean change between frames under 0.05 gray levels) while the `state` shows the robot moving | High means a frozen or dropped feed. A burst only counts when the robot is moving, so a still scene with a still robot is never flagged. A live camera on a static scene reads about 0.3 or more, so the threshold sits far below it. Needs `state` |
+| `video_action_lag_ms` | Absolute offset, in milliseconds, between the motion in the video (frame-to-frame change) and the arm speed in the action, from cross-correlation over the central 30 s | Near 0 is in sync. It is relative to peers: a lag every episode shares sets the baseline, so only the episodes that differ from it stand out. Nothing is reported when the video does not track the action (correlation under 0.3), for example when the robot is out of view. Needs `action` |
+
+The first three share one decode of 12 frames, so enabling all of them costs the same as enabling one. On the development set a video takes about 0.05 s for the frame metrics, and about 0.9 s per episode (all cameras) for the lag.
+
 ## Integrity
 
 Pass, warn or fail flags plus counts. They mean "this episode is broken", not "this episode is worse", and they never enter the score. Integrity produces its own verdict.
@@ -137,6 +151,7 @@ A profile is a named set of groups that produces one ranking score.
 | `tracking` | `track_resid`, `accel_spike_frac`, `joint_limit_frac` |
 | `gripper` | `gripper_flips_per_s`, `missed_grasp_frac` |
 | `consistency` | `action_divergence` |
+| `camera` (opt-in) | `blur`, `exposure_err`, `clipped_frac`, `frozen_frac`, `video_action_lag_ms` |
 
 **Aggregation.**
 
@@ -146,7 +161,7 @@ A profile is a named set of groups that produces one ranking score.
 
 | Profile | Uses | Intended for |
 |---|---|---|
-| `policy` | All groups above | Training low-level imitation policies (ACT, Diffusion Policy), where geometry and timing matter and language does not |
+| `policy` | All groups above (the camera group only when camera metrics were computed) | Training low-level imitation policies (ACT, Diffusion Policy), where geometry and timing matter and language does not |
 | `vla` | `policy` plus the language flags | Fine-tuning vision-language-action models, where the instruction must match the demonstration |
 
 Rules that hold for every profile:
@@ -160,7 +175,7 @@ Rules that hold for every profile:
 
 ## How the metrics are checked
 
-Each scored metric has a corruption it must catch: added jitter, an inserted idle run, a truncated episode, values pushed against joint limits, and so on. The corruption is applied to real episodes, and the test asserts that the corrupted copy ranks worse than its own original. Every metric is also re-tested after truncating all episodes to a common length, to catch metrics that only measure duration. Results are in `harness/REPORT.md`.
+Each scored metric has a corruption it must catch: added jitter, an inserted idle run, a truncated episode, values pushed against joint limits, and so on. The corruption is applied to real episodes, and the test asserts that the corrupted copy ranks worse than its own original. Every metric is also re-tested after truncating all episodes to a common length, to catch metrics that only measure duration. Running `python -m lerobot_data_curation.harness.run_harness --dataset <name>` writes the results to `harness/REPORT.md`.
 
 ## Evidence
 
@@ -178,6 +193,6 @@ Not validated:
 - Default thresholds (2% limit margin, minimum phase length, 20-episode group size, warn at z >= 2, weights) are starting points to tune on your data.
 - `action_divergence` and `stats_leverage` cannot be tested on datasets with very few episodes per source. `sparc_phase`, `missed_grasp_frac`, `recovery_count`, `schema_mismatch` and the outlier metrics are covered by synthetic tests only.
 
-## Not computed yet
+## Not computed
 
-Camera metrics (blur, exposure, clipped pixels, frozen frames, video-action lag), visual duplicate detection, and a vision-language check of the task string are not computed. The Vision tab is a placeholder.
+The plugin deliberately has no model-based metrics: no embedding-based duplicate detection and no vision-language check of the task string.
