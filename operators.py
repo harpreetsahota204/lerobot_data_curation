@@ -1,6 +1,7 @@
 """Compute quality: scores every LeRobot episode in the target view.
 
-Phase 1 (no video decoding). Runs delegated by default. Scores are batch-relative
+Runs the metrics you choose. The camera metrics are opt-in, on their own tab of the
+form, because they decode video. Runs delegated by default. Scores are batch-relative
 by construction (see ``engine.score``), so the unit of work is the whole target
 view: scoring a filtered subset gives z-scores relative to that subset.
 """
@@ -31,6 +32,7 @@ FAMILY_LABELS = {
     "tracking": "Tracking and contact",
     "gripper": "Gripper",
     "consistency": "Consistency",
+    "camera": "Camera (decodes video, about 1 s per episode)",
     "integrity": "Integrity",
     "language": "Language",
     "outliers": "Outliers",
@@ -41,6 +43,45 @@ def _is_lerobot(dataset):
     return dataset is not None and any(
         s.get("kind") == "lerobot-episode" for s in (dataset.media_sources or [])
     )
+
+
+def _last_run_config(dataset):
+    """``{"metrics": [...], "min_group": int, "overrides": {...}}`` from the last compute run, or {}."""
+    if not dataset.has_run(write.RUN_KEY):
+        return {}
+    try:
+        cfg = dataset.get_run_info(write.RUN_KEY).config
+        return {
+            "metrics": list(getattr(cfg, "metrics", None) or []),
+            "min_group": getattr(cfg, "min_group", None),
+            "overrides": dict(getattr(cfg, "overrides", None) or {}),
+        }
+    except Exception:  # noqa: BLE001 - a damaged run record must not block a new run
+        return {}
+
+
+def _default_on(name, last_metrics):
+    """Whether a metric's checkbox starts ticked.
+
+    Opt-in metrics start off, except the camera ones that the last run included:
+    re-running Compute quality would otherwise clear the camera scores an earlier run
+    wrote, because every run replaces the fields of the one before it.
+    """
+    spec = METRICS[name]
+    return (not spec["opt_in"]) or (spec["family"] == "camera" and name in (last_metrics or []))
+
+
+SECONDS_PER_EPISODE = 1.5  # measured on lr_dev: 1.0 to 1.4 s per episode with every camera metric on
+
+
+def _duration(seconds):
+    if seconds < 90:
+        return "%d s" % max(1, round(seconds))
+    return "%d min" % round(seconds / 60.0)
+
+
+def camera_metric_names():
+    return [name for name, spec in METRICS.items() if spec["family"] == "camera"]
 
 
 def _feature_map_summary(reader):
@@ -94,11 +135,14 @@ def _metric_rows():
 
 
 def _selected_metrics(ctx):
+    """The metrics ticked in the form. Camera metrics are ticked on their own tab."""
     cfg = ctx.params.get("metrics_cfg") or {}
+    camera = ctx.params.get("camera_cfg") or {}
+    last = _last_run_config(ctx.dataset).get("metrics")
     return [
         name
         for name, spec in _metric_rows()
-        if cfg.get("metric_%s" % name, not spec["opt_in"])
+        if (camera if spec["family"] == "camera" else cfg).get("metric_%s" % name, _default_on(name, last))
     ]
 
 
@@ -159,6 +203,7 @@ class ComputeQuality(foo.Operator):
         tabs = types.TabsView()
         tabs.add_choice("CHECKS", label="Dataset checks")
         tabs.add_choice("METRICS", label="Metrics")
+        tabs.add_choice("CAMERA", label="Camera")
         tabs.add_choice("NORMALIZATION", label="Normalization")
         inputs.enum("tab", tabs.values(), default="CHECKS", view=tabs)
         tab = ctx.params.get("tab", "CHECKS")
@@ -214,6 +259,8 @@ class ComputeQuality(foo.Operator):
             for name, spec in _metric_rows():
                 if spec["fn"] is None and spec["family"] != "outliers":
                     continue
+                if spec["family"] == "camera":
+                    continue  # on the Camera tab
                 if spec["family"] not in seen:
                     seen.append(spec["family"])
                     section.type.view(
@@ -229,7 +276,24 @@ class ComputeQuality(foo.Operator):
                         "" if spec["scored"] else " (not scored)",
                     ),
                     description=spec["description"],
-                    default=not spec["opt_in"],
+                    default=_default_on(name, _last_run_config(ctx.dataset).get("metrics")),
+                    view=types.CheckboxView(),
+                )
+        elif tab == "CAMERA":
+            inputs.md(
+                "Camera metrics decode each episode's video, so they take about %s for this view. "
+                "Each camera is compared with the same camera in other episodes."
+                % _duration(len(view) * SECONDS_PER_EPISODE),
+                name="camera_intro",
+            )
+            section = inputs.obj("camera_cfg", view=types.GridView(orientation="vertical", gap=2))
+            last = _last_run_config(ctx.dataset).get("metrics")
+            for name in camera_metric_names():
+                section.type.bool(
+                    "metric_%s" % name,
+                    label=name,
+                    description=METRICS[name]["description"],
+                    default=_default_on(name, last),
                     view=types.CheckboxView(),
                 )
         else:
@@ -249,15 +313,22 @@ class ComputeQuality(foo.Operator):
         task_counts = Counter(canonical_task(t) for t in view.values("tasks"))
         pooled = sum(n for key, n in task_counts.items() if not key or n < min_group)
         selected = _selected_metrics(ctx)
+        has_camera = any(METRICS[m]["family"] == "camera" for m in selected)
         inputs.view(
             "advisory",
             types.Notice(
                 label=(
-                    "%d episode(s) · %d metric(s) selected · %d episode(s) belong to a task "
+                    "%d episode(s) · %d metric(s) selected%s · %d episode(s) belong to a task "
                     "group under %d and will be normalized against the whole view "
                     "(low-confidence ranking)."
                 )
-                % (len(view), len(selected), pooled, min_group)
+                % (
+                    len(view),
+                    len(selected),
+                    " (camera metrics decode video: about %s)" % _duration(len(view) * SECONDS_PER_EPISODE) if has_camera else "",
+                    pooled,
+                    min_group,
+                )
             ),
         )
         return types.Property(inputs, view=types.View(label="LeRobot curation: compute quality"))
@@ -366,3 +437,4 @@ class ComputeQuality(foo.Operator):
             lines.append("Metric errors: %s" % r["metric_failures"])
         outputs.str("summary", label="Result", view=types.MarkdownView(), default="\n\n".join(lines))
         return types.Property(outputs)
+

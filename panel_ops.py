@@ -97,6 +97,23 @@ class ShowEpisodes(foo.Operator):
         return {}
 
 
+class PromptVision(foo.Operator):
+    """Opens the compute form on its Camera tab, with every camera metric ticked."""
+
+    @property
+    def config(self):
+        return foo.OperatorConfig(name="lr_prompt_vision", unlisted=True)
+
+    def execute(self, ctx):
+        from .operators import camera_metric_names
+
+        ctx.trigger(
+            "lerobot-data-curation/lr_compute_quality",
+            params={"tab": "CAMERA", "camera_cfg": {"metric_%s" % name: True for name in camera_metric_names()}},
+        )
+        return {}
+
+
 class PromptCompute(foo.Operator):
     """Opens the compute form from the panel's empty state."""
 

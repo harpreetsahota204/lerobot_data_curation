@@ -18,5 +18,6 @@ operators:
   - lr_tag_episodes
   - lr_show_episodes
   - lr_prompt_compute
+  - lr_prompt_vision
 panels:
   - lerobot_curation_panel

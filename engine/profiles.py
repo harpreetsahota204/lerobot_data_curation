@@ -12,8 +12,7 @@ import numpy as np
 
 from . import normalize
 
-# group -> {metric: weight}. Slice 1 has the groups for the five built-in metrics;
-# later slices add tracking, gripper, consistency and camera.
+# group -> {metric: weight}.
 GROUPS = {
     "motion": {"sparc": 1.0, "ldlj": 0.5, "sparc_phase": 1.0},
     "time": {
@@ -26,17 +25,24 @@ GROUPS = {
     "tracking": {"track_resid": 1.0, "accel_spike_frac": 1.0, "joint_limit_frac": 1.0},
     "gripper": {"gripper_flips_per_s": 1.0, "missed_grasp_frac": 1.0},
     "consistency": {"action_divergence": 1.0},
+    "camera": {
+        "blur": 1.0,
+        "exposure_err": 1.0,
+        "clipped_frac": 1.0,
+        "frozen_frac": 1.0,
+        "video_action_lag_ms": 1.0,
+    },
 }
 
 PROFILES = {
     "policy": {
         "label": "Policy (ACT, Diffusion Policy)",
-        "groups": ["motion", "time", "tracking", "gripper", "consistency"],
+        "groups": ["motion", "time", "tracking", "gripper", "consistency", "camera"],
         "language_forces_review": False,
     },
     "vla": {
         "label": "VLA (instruction must match)",
-        "groups": ["motion", "time", "tracking", "gripper", "consistency"],
+        "groups": ["motion", "time", "tracking", "gripper", "consistency", "camera"],
         "language_forces_review": True,
     },
 }

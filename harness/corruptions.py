@@ -10,8 +10,10 @@ A fork that adds a metric adds one entry here.
 
 from dataclasses import dataclass, replace
 
+import cv2
 import numpy as np
 
+from lerobot_data_curation.engine import decode
 from lerobot_data_curation.engine.metrics import time_metrics, tracking
 from lerobot_data_curation.engine.signals import (
     _joint_range,
@@ -257,6 +259,99 @@ def wander(ep, rng):
     return replace(ep, action=action)
 
 
+class CorruptingDecoder:
+    """Stands in for ``engine.decode`` and changes what the camera metrics see.
+
+    The video file is untouched: frames are altered as they are decoded, so one
+    real episode can be paired with a blurred, darkened, frozen or delayed copy of
+    itself without re-encoding anything.
+
+    Args:
+        frame_fn (None): ``fn(image) -> image`` applied to every decoded frame
+        shift_s (0.0): the video shows the scene as it was this many seconds earlier
+            (positive: the video lags the action)
+        freeze_at (None): from this fraction of the window on, the video holds one frame
+    """
+
+    def __init__(self, frame_fn=None, shift_s=0.0, freeze_at=None):
+        self.frame_fn, self.shift_s, self.freeze_at = frame_fn, shift_s, freeze_at
+        self._held = {}
+
+    def _alter(self, window, t, image, gray, max_side):
+        if self.freeze_at is not None:
+            t_freeze = window.from_timestamp + self.freeze_at * (window.to_timestamp - window.from_timestamp)
+            if t >= t_freeze:
+                key = (window.path, window.from_timestamp, gray, max_side)
+                if key not in self._held:
+                    self._held[key] = decode.decode_frames(window, [t_freeze], gray=gray, max_side=max_side)[0][1]
+                image = self._held[key]
+        return self.frame_fn(image) if self.frame_fn is not None else image
+
+    def decode_frames(self, window, times, gray=True, max_side=None):
+        frames = decode.decode_frames(window, [t - self.shift_s for t in times], gray=gray, max_side=max_side)
+        return [(t + self.shift_s, self._alter(window, t + self.shift_s, img, gray, max_side)) for t, img in frames]
+
+    def decode_burst(self, window, start, n_frames, gray=True, max_side=None):
+        frames = decode.decode_burst(window, start - self.shift_s, n_frames, gray=gray, max_side=max_side)
+        return [(t + self.shift_s, self._alter(window, t + self.shift_s, img, gray, max_side)) for t, img in frames]
+
+    def iter_frames(self, window, start=None, stop=None, step=1, max_frames=None, gray=True, max_side=None):
+        lo = window.from_timestamp if start is None else start
+        hi = window.to_timestamp if stop is None else stop
+        for t, img in decode.iter_frames(
+            window, lo - self.shift_s, hi - self.shift_s, step, max_frames, gray=gray, max_side=max_side
+        ):
+            yield t + self.shift_s, self._alter(window, t + self.shift_s, img, gray, max_side)
+
+
+def _video_copy(ep, decoder, drop):
+    """A copy of `ep` seen through `decoder`. Cached camera results the corruption does not change are kept."""
+    return replace(ep, decoder=decoder, cache={k: v for k, v in ep.cache.items() if k[0] not in drop})
+
+
+def blurry_camera(ep, rng):
+    """Gaussian blur worth 1% of the frame's longer side."""
+    if not ep.videos:
+        return None
+    return _video_copy(
+        ep, CorruptingDecoder(frame_fn=lambda img: cv2.GaussianBlur(img, (0, 0), 0.01 * max(img.shape[:2]))), ("stills",)
+    )
+
+
+def dark_camera(ep, rng):
+    """Brightness scaled to 15%."""
+    if not ep.videos:
+        return None
+    return _video_copy(ep, CorruptingDecoder(frame_fn=lambda img: (img.astype(np.float32) * 0.15).astype(np.uint8)), ("stills",))
+
+
+def blown_highlights(ep, rng):
+    """The left 30% of every frame is pure white."""
+    if not ep.videos:
+        return None
+
+    def fn(img):
+        out = img.copy()
+        out[:, : int(0.3 * out.shape[1])] = 255
+        return out
+
+    return _video_copy(ep, CorruptingDecoder(frame_fn=fn), ("stills",))
+
+
+def frozen_feed(ep, rng):
+    """The video holds one frame from the middle of the episode on."""
+    if not ep.videos or ep.state is None:
+        return None
+    return _video_copy(ep, CorruptingDecoder(freeze_at=0.5), ("bursts",))
+
+
+def delayed_video(ep, rng):
+    """The video lags the action by half a second (15 frames at 30 fps)."""
+    if not ep.videos or ep.action is None:
+        return None
+    return _video_copy(ep, CorruptingDecoder(shift_s=0.5), ("energy",))
+
+
 CORRUPTIONS = [
     Corruption("identity", "No change. Nothing should move.", lambda ep, rng: replace(ep), ()),
     Corruption("jitter", "Add white noise worth 5% of each joint's motion to the action", jitter, ("ldlj",)),
@@ -279,6 +374,11 @@ CORRUPTIONS = [
     Corruption("jolts", "Five one-frame jumps in the state", jolts, ("accel_spike_frac",)),
     Corruption("at_limits", "Hold the state at its dataset maximum for 40% of the episode", at_limits, ("joint_limit_frac",)),
     Corruption("gripper_chatter", "Toggle the gripper every 5 frames for half the episode", gripper_chatter, ("gripper_flips_per_s",)),
+    Corruption("blurry_camera", "Gaussian blur worth 1% of the frame's longer side", blurry_camera, ("blur",)),
+    Corruption("dark_camera", "Scale brightness to 15%", dark_camera, ("exposure_err",)),
+    Corruption("blown_highlights", "Paint the left 30% of every frame white", blown_highlights, ("clipped_frac",)),
+    Corruption("frozen_feed", "Hold one frame from the middle of the episode on", frozen_feed, ("frozen_frac",)),
+    Corruption("delayed_video", "The video lags the action by 0.5 s (15 frames at 30 fps)", delayed_video, ("video_action_lag_ms",)),
 ]
 
 # Metrics that cannot be exercised on this data, and why. Synthetic tests in

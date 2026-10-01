@@ -174,6 +174,12 @@ class EpisodeData:
     # Confirmed dataset-level assumptions for this episode's source, e.g.
     # {"action_semantics": "joint_positions", "gripper_open_is": "high"}
     assumptions: dict = field(default_factory=dict)
+    # Seams for the camera metrics (see engine/metrics/camera.py). `decoder` is any object
+    # with the functions of engine/decode.py, or None for the real one; the harness swaps
+    # in a corrupting wrapper. `cache` holds small per-camera results (never raw frames),
+    # so the five camera metrics decode each video once between them.
+    decoder: "object | None" = field(default=None, repr=False)
+    cache: dict = field(default_factory=dict, repr=False)
 
 
 class EpisodeReadError(Exception):

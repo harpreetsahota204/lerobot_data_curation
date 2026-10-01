@@ -168,6 +168,11 @@ def run_length_control(episodes, names, clean_results):
         spec = METRICS[metric]
         if not spec["scored"] or spec["kind"] == "flag" or metric == "length_z":
             continue
+        if spec["family"] == "camera":
+            # Truncation shortens the data arrays, not the video, so there is nothing for it to confound.
+            rows.append({"metric": metric, "n": 0, "rho_kept": None, "rho_length": None,
+                         "status": "not judged: the video is not truncated"})
+            continue
         pairs = [
             (clean_results[s].metrics[metric]["z"], truncated[s].metrics[metric]["z"], durations[s])
             for s in raws

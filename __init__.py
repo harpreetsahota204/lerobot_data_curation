@@ -6,6 +6,7 @@ from .panel_ops import (
     GetPanelData,
     OpenEpisode,
     PromptCompute,
+    PromptVision,
     ShowEpisodes,
     TagEpisodes,
 )
@@ -24,3 +25,4 @@ def register(p):
     p.register(TagEpisodes)
     p.register(ShowEpisodes)
     p.register(PromptCompute)
+    p.register(PromptVision)

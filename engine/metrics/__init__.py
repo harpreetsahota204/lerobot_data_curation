@@ -9,7 +9,7 @@ episode-level value. To add a metric: write the function, add an entry with
 
 - ``fn``: the metric function
 - ``family``: the family it belongs to (motion, time, tracking, gripper,
-  consistency, integrity, language, outliers)
+  consistency, camera, integrity, language, outliers)
 - ``group``: the profile group it votes in, or None if it is never scored
 - ``requires``: arrays the episode must have (``"action"``, ``"state"``); the
   metric is skipped when one is missing
@@ -26,7 +26,7 @@ episode-level value. To add a metric: write the function, add an entry with
 - ``description``: one plain-language sentence for tooltips
 """
 
-from . import consistency, gripper, integrity, language, motion, time_metrics, tracking
+from . import camera, consistency, gripper, integrity, language, motion, time_metrics, tracking
 
 
 def spec(
@@ -191,6 +191,40 @@ METRICS = {
         description=(
             "Feature dimensions this episode alone stretches beyond its source's range. High means "
             "it distorts the normalization statistics every training run will use. Never scored."
+        ),
+    ),
+    # -- camera (decode video; off unless the user turns them on) ---------
+    "blur": spec(
+        camera.blur, "camera", group="camera", higher_is_worse=False, per_signal=True, opt_in=True,
+        description=(
+            "Sharpness of the camera image: a low percentile of the Laplacian variance over sampled "
+            "frames, on a log scale. Lower is blurrier. Compared with the same camera in other episodes."
+        ),
+    ),
+    "exposure_err": spec(
+        camera.exposure_err, "camera", group="camera", per_signal=True, opt_in=True,
+        description=(
+            "How far the mean brightness is from mid-gray, from 0 (mid-gray) to 1 (black or white). "
+            "High means too dark or too bright."
+        ),
+    ),
+    "clipped_frac": spec(
+        camera.clipped_frac, "camera", group="camera", per_signal=True, opt_in=True,
+        description="Share of pixels at pure black or pure white. High means blown highlights or crushed shadows.",
+    ),
+    "frozen_frac": spec(
+        camera.frozen_frac, "camera", group="camera", requires=("state",), per_signal=True, opt_in=True,
+        description=(
+            "Share of short bursts, while the robot is moving, in which the frames are nearly "
+            "identical. High means a frozen or dropped camera feed."
+        ),
+    ),
+    "video_action_lag_ms": spec(
+        camera.video_action_lag_ms, "camera", group="camera", requires=("action",), per_signal=True, opt_in=True,
+        description=(
+            "Offset in milliseconds between the motion in the video and the commanded motion. Near 0 is "
+            "in sync. Relative to other episodes of the same camera, and not reported when the video "
+            "does not track the action."
         ),
     ),
     # -- integrity -------------------------------------------------------

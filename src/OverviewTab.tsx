@@ -29,7 +29,7 @@ const EXPLAINERS = {
     "Scores are measured against each episode's own task, or against the whole view for small tasks, so " +
     "comparing sources also compares what tasks and robots they contain.",
   score:
-    "The selected profile's score: for each metric group (motion, time, tracking, gripper, consistency) take " +
+    "The selected profile's score: for each metric group (motion, time, tracking, gripper, consistency, and camera when it was computed) take " +
     "the worst weighted robust z-score of its metrics, then take the highest group value. It is a worst-of, " +
     "never an average, so one failing group is not diluted by the others. A z-score is how many robust " +
     "standard deviations worse than typical an episode is, measured against its own task when that task has " +

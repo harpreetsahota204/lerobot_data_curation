@@ -29,7 +29,7 @@ const MAX_DEFAULT_JOINTS = 6;
 const EXPLAINERS = {
   metrics:
     "Every metric computed for this episode. Value is the worst-of across arms (or cameras); z says how many " +
-    "robust standard deviations worse than typical it is (higher is worse). The breakdown column shows each arm's " +
+    "robust standard deviations worse than typical it is (higher is worse). The breakdown column shows each arm's or camera's " +
     "own value. Not-scored metrics are shown for context.",
   traces:
     "Per-joint action (solid) and state (dashed), each rescaled by the joint's own range so joints with different " +
@@ -186,7 +186,7 @@ export default function Inspector(props: {
                 { key: "metric", label: "Metric" },
                 { key: "value", label: "Value", align: "right" },
                 { key: "z", label: "z", align: "right" },
-                { key: "breakdown", label: "Per arm" },
+                { key: "breakdown", label: "Per arm or camera" },
                 { key: "note", label: "Note" },
               ]}
               rowKeys={metricRows.map((m) => m.name)}

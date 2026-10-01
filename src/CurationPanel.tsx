@@ -35,6 +35,7 @@ export default function CurationPanel() {
   const tagOp = useOperatorExecutor(`${PLUGIN}/lr_tag_episodes`);
   const showOp = useOperatorExecutor(`${PLUGIN}/lr_show_episodes`);
   const promptOp = useOperatorExecutor(`${PLUGIN}/lr_prompt_compute`);
+  const visionOp = useOperatorExecutor(`${PLUGIN}/lr_prompt_vision`);
 
   const view = useRecoilValue(fos.view);
   const selected = useRecoilValue(fos.selectedSamples);
@@ -62,6 +63,10 @@ export default function CurationPanel() {
   }, [dataOp.result]);
 
   const activeProfile = profile ?? data?.default_profile ?? "policy";
+  const hasCamera = useMemo(
+    () => (data?.computed ?? []).some((m) => data?.metrics[m]?.family === "camera"),
+    [data]
+  );
 
   const rows = useMemo(
     () => (data?.rows ?? []).filter((r) => !task || r.task === task),
@@ -217,14 +222,39 @@ export default function CurationPanel() {
         {activeTab === "integrity" && (
           <IntegrityTab data={data} rows={rows} onSelect={setSelectedId} onShow={showEpisodes} selectedId={selectedId} />
         )}
-        {activeTab === "vision" && (
-          <Card title="Vision">
-            <div style={{ padding: "32px 8px", textAlign: "center", color: theme.textDim, fontSize: 13 }}>
-              Blur, exposure, frozen-frame, video-action lag and duplicate detection arrive with phase 2, which needs
-              video decoding. Not built yet.
+        {activeTab === "vision" &&
+          (hasCamera ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, color: theme.textDim, flex: 1 }}>
+                  Camera metrics from the last run. Each camera is compared with the same camera in other episodes.
+                </span>
+                <Button label="Recompute camera metrics" onClick={() => visionOp.execute({})} />
+              </div>
+              <MetricGrid
+                data={data}
+                rows={rows}
+                families={["camera"]}
+                onSelect={setSelectedId}
+                onShow={showEpisodes}
+                selectedId={selectedId}
+                explainer=""
+                rankingInfo="Episodes ranked worst-first on the camera metrics. Each is taken from the worst camera of the episode, and all five vote as one group."
+                signalNoun="camera"
+              />
             </div>
-          </Card>
-        )}
+          ) : (
+            <Card title="Vision">
+              <div style={{ padding: "32px 8px", textAlign: "center", color: theme.textDim, fontSize: 13 }}>
+                <div style={{ marginBottom: 14, maxWidth: 520, marginLeft: "auto", marginRight: "auto", lineHeight: 1.5 }}>
+                  Camera metrics score blur, exposure, clipped pixels, frozen feeds and video-action lag. They decode
+                  video, so they take longer than the other metrics. The button opens the compute form on its Camera tab,
+                  and a run re-ranks every episode with the camera group included.
+                </div>
+                <Button label="Compute camera metrics" primary onClick={() => visionOp.execute({})} />
+              </div>
+            </Card>
+          ))}
         {activeTab === "language" && (
           <LanguageTab data={data} rows={rows} onSelect={setSelectedId} onShow={showEpisodes} selectedId={selectedId} />
         )}

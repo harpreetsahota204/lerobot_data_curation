@@ -62,7 +62,7 @@ export function SignalChips(props: {
           <button
             key={signal}
             onClick={() => onPick(isActive ? null : signal)}
-            title={isActive ? "Show all signals" : `Show only ${signal}`}
+            title={isActive ? "Show all" : `Show only ${signal}`}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -92,6 +92,7 @@ const FAMILY_TITLES: Record<string, string> = {
   tracking: "Tracking and contact",
   gripper: "Gripper",
   consistency: "Consistency",
+  camera: "Camera",
 };
 
 /** Values of one metric across rows, per series (signal), for one row set. */
@@ -133,8 +134,11 @@ export default function MetricGrid(props: {
   selectedId: string | null;
   explainer: string;
   rankingInfo: string;
+  /** What the chips isolate, for the hint text and tooltips ("signal" for arms, "camera" for the Vision tab) */
+  signalNoun?: string;
 }) {
   const { data, rows, families, onSelect, onShow, selectedId } = props;
+  const noun = props.signalNoun ?? "signal";
   const [only, setOnly] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState<string | null>(null);
 
@@ -171,7 +175,7 @@ export default function MetricGrid(props: {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {chipSignals.length > 1 && (
         <div style={{ fontSize: 11, color: theme.textDim }}>
-          {only ? `showing only ${only} · click its chip again to show all` : "click a signal chip to isolate it"}
+          {only ? `showing only ${only} · click its chip again to show all` : `click a ${noun} chip to isolate it`}
         </div>
       )}
       <SignalChips signals={chipSignals} active={only} onPick={setOnly} />
@@ -220,7 +224,7 @@ export default function MetricGrid(props: {
                     title={label(metric).title}
                     subtitle={signals.length > 0 ? subtitle : undefined}
                     info={`${meta.description} Bars count episodes in the current view${
-                      meta.per_signal ? ", one colored series per arm" : ""
+                      meta.per_signal ? `, one colored series per ${props.signalNoun ?? "arm or camera"}` : ""
                     }; dashed lines mark warn thresholds when every episode shares one normalization group. Click a bar to filter the samples panel.`}
                     action={<ExpandToggle expanded={expanded === metric} onClick={() => setExpanded(expanded === metric ? null : metric)} />}
                   >

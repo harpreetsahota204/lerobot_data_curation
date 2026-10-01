@@ -35,8 +35,7 @@ export default function LanguageTab(props: {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <Card>
         <div style={{ fontSize: 12, color: theme.textDim, lineHeight: 1.5 }}>
-          Static task-string checks only. The instruction-versus-video check with a vision-language model,
-          proposed task rewrites and Accept / Reject arrive with phase 3, which is on hold.
+          Static task-string checks only. No model is used.
         </div>
       </Card>
       <div style={{ display: "grid", gridTemplateColumns: expanded ? "1fr" : "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
