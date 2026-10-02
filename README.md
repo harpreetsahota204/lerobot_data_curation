@@ -68,7 +68,7 @@ A **Task** dropdown sits above the tabs. Every episode gets one score from the m
 |---|---|
 | **Overview** | Score histogram, verdict counts, episodes per task, outlier scatter and the worst-first ranking. |
 | **Motion & Action** | One histogram per metric (smoothness, time, tracking, gripper, consistency), signal chips to isolate one arm, and a worst-first table. |
-| **Integrity & Coverage** | Integrity verdicts, episodes per task and source, and a per-episode list of which check failed. |
+| **Integrity & Coverage** | Integrity verdicts, episodes per task, and a per-episode list of which check failed. |
 | **Vision** | The five camera metrics (blur, exposure, clipped pixels, frozen feed, video-action lag): one histogram each, camera chips to isolate one camera, and a worst-first table. Empty until the camera metrics are computed. |
 | **Language** | Static checks on the task string: missing, placeholder, too short, no action verb. |
 

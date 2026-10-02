@@ -55,10 +55,6 @@ export default function IntegrityTab(props: {
   for (const r of rows) taskCounts.set(r.task, (taskCounts.get(r.task) ?? 0) + 1);
   const items = [...taskCounts.entries()].map(([name, count]) => ({ name: name || "(no task)", count })).sort((a, b) => b.count - a.count);
 
-  const sourceCounts = new Map<string, number>();
-  for (const r of rows) sourceCounts.set(r.source, (sourceCounts.get(r.source) ?? 0) + 1);
-  const sources = [...sourceCounts.entries()].sort((a, b) => b[1] - a[1]);
-
   const sorted = [...rows].sort((a, b) => (ORDER[a.integrity] ?? 9) - (ORDER[b.integrity] ?? 9));
 
   return (
@@ -96,19 +92,6 @@ export default function IntegrityTab(props: {
           </Card>
         )}
       </div>
-
-      <Card title="Episodes per source" subtitle={`${sources.length} source(s)${data.balance.dominant_sources?.length ? " · one source holds more than half" : ""}`}>
-        <DataTable
-          columns={[
-            { key: "source", label: "Source" },
-            { key: "n", label: "Episodes", align: "right" },
-            { key: "share", label: "Share", align: "right" },
-          ]}
-          rowKeys={sources.map(([s]) => s)}
-          rows={sources.map(([s, n]) => ({ source: s, n, share: `${Math.round((100 * n) / Math.max(1, rows.length))}%` }))}
-          onRowClick={(s) => onShow(rows.filter((r) => r.source === s).map((r) => r.id), `source '${s}'`)}
-        />
-      </Card>
 
       <Card title="Per-episode integrity" subtitle="Failures first · click a row to inspect the episode" info={EXPLAINERS.table}>
         <DataTable
