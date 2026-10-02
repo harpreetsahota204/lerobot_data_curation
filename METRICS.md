@@ -26,7 +26,7 @@ Each joint field is one signal. Every joint you put in the Arm field is one arm,
 - **Gripper:** an open/close dimension. Feeds the gripper metrics and is left out of arm speed. Several dimensions in one gripper field are averaged into one signal. In a dual-arm layout a gripper belongs to the arm on its own side.
 - **Hand:** a multi-joint end effector, such as a 22-joint dexterous hand. Scored for smoothness as its own signal (`hand_all`, `hand_left`, `hand_right`), left out of arm speed, and given no gripper metrics.
 
-In the form, joints are chips in an input field, in the same style as the cameras. When the dataset gives joint names you pick joints by name (with their observed range from `stats.json` beside them), or pick a whole named group in one click (`left_arm_q_0` to `left_arm_q_6` is the shortcut `left_arm_q`). A joint used in one field disappears from the others. When the names are missing or unusable you type dimension numbers instead, such as `0-6` or `0-2, 5`.
+In the form, joints are chips in an input field, in the same style as the cameras. When the dataset gives joint names you pick each joint by name (with its observed range from `stats.json` beside it). Nothing is grouped for you. A picked joint disappears from every field's list. When the names are missing or unusable you type dimension numbers instead, such as `0-6` or `0-2, 5`.
 
 The dataset's balance (episodes per task and per source) is reported on the Integrity & Coverage tab. It is a count, not a pick.
 

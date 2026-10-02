@@ -49,8 +49,8 @@ The panel ships prebuilt in `dist/index.umd.js`. To change the frontend: `npm in
    ```
 
 2. Open the dataset in the App and run **LeRobot curation: compute quality** from the operator browser, or click the button in the empty panel. It runs delegated by default. The form has four tabs:
-   - **Data:** one line of what the dataset declares, then three short sections. **Robot:** Single arm or Dual arm, and a **Has multi-joint hands** checkbox (off by default). **Arrays:** the **state** and **action** arrays, which start on `observation.state` and `action` when the dataset uses those LeRobot standard names and at Not set otherwise. When both are picked and the same size, a yes/no question asks whether the action is absolute joint positions; when they differ in size, a note says the action cannot be joint positions. **Joints:** chip fields for the Arm and the Gripper (a left and a right set for dual arm, plus Hand fields if the checkbox is on), picked the same way as cameras. Joints are offered by name with their observed range, with one-click shortcuts for whole named groups. The gripper's open direction appears right under the Gripper field once gripper joints are picked. Nothing is guessed from the data. A list at the bottom of the form shows which metric families will be scored and what each switched-off family still needs. Your picks are remembered for the next run.
-   - **Metrics:** one checkbox per metric, grouped by family. Opt-in metrics are off by default.
+   - **Data:** one line of what the dataset declares, then three short sections. **Robot:** Single arm or Dual arm, and a **Has multi-joint hands** checkbox (off by default). **Arrays:** the **state** and **action** arrays, which start on `observation.state` and `action` when the dataset uses those LeRobot standard names and at Not set otherwise. When both are picked and the same size, a yes/no question asks whether the action is absolute joint positions; when they differ in size, a note says the action cannot be joint positions. **Joints:** chip fields for the Arm and the Gripper (a left and a right set for dual arm, plus Hand fields if the checkbox is on), picked the same way as cameras. Each joint is offered by name with its observed range; you pick every joint yourself, and a picked joint leaves every field's list. The gripper's open direction appears right under the Gripper field once gripper joints are picked. Nothing is guessed from the data. A list at the bottom of the form shows which metric families will be scored and what each switched-off family still needs. Your picks are remembered for the next run.
+   - **Metrics:** one checkbox per metric, in a collapsible section per family. Each section title shows how many of its metrics are selected, with a line under it on what the family is for. Opt-in metrics are off by default.
    - **Camera:** the video cameras to score (with their resolution), and the five camera metrics. No camera is selected for you, because decoding is the slow part (about 0.4 s per camera per episode).
    - **Normalization:** the smallest task group that is normalized on its own (default 20 episodes).
 
@@ -100,7 +100,7 @@ The footer has three tag buttons, `review`, `exclude-candidate` and `relabel`, w
 Run from the folder that contains `lerobot_data_curation/`:
 
 ```bash
-python -m unittest discover -s lerobot_data_curation/tests -t .    # 252 tests, about 17 seconds
+python -m unittest discover -s lerobot_data_curation/tests -t .    # 248 tests, about 16 seconds
 python -m lerobot_data_curation.harness.run_harness --dataset <your dataset>   # writes harness/REPORT.md and report.json
 ```
 
