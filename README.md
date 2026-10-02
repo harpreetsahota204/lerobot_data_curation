@@ -49,12 +49,12 @@ The panel ships prebuilt in `dist/index.umd.js`. To change the frontend: `npm in
    ```
 
 2. Open the dataset in the App and run **LeRobot curation: compute quality** from the operator browser, or click the button in the empty panel. It runs delegated by default. The form has four tabs:
-   - **Dataset checks:** the state and action columns the plugin found, and what it assumed about action semantics, joint units, gripper direction, camera roles and balance. Override the action semantics, the gripper direction, or the state and action column names if it guessed wrong. Metrics that depend on an unknown assumption switch off instead of guessing.
+   - **Data:** one line of what the dataset declares, then three short sections. **Robot:** Single arm or Dual arm, and a **Has multi-joint hands** checkbox (off by default). **Arrays:** the **state** and **action** arrays, which start on `observation.state` and `action` when the dataset uses those LeRobot standard names and at Not set otherwise. When both are picked and the same size, a yes/no question asks whether the action is absolute joint positions; when they differ in size, a note says the action cannot be joint positions. **Joints:** chip fields for the Arm and the Gripper (a left and a right set for dual arm, plus Hand fields if the checkbox is on), picked the same way as cameras. Joints are offered by name with their observed range, with one-click shortcuts for whole named groups. The gripper's open direction appears right under the Gripper field once gripper joints are picked. Nothing is guessed from the data. A list at the bottom of the form shows which metric families will be scored and what each switched-off family still needs. Your picks are remembered for the next run.
    - **Metrics:** one checkbox per metric, grouped by family. Opt-in metrics are off by default.
-   - **Camera:** the five camera metrics. They are off by default because they decode video.
+   - **Camera:** the video cameras to score (with their resolution), and the five camera metrics. No camera is selected for you, because decoding is the slow part (about 0.4 s per camera per episode).
    - **Normalization:** the smallest task group that is normalized on its own (default 20 episodes).
 
-3. Optional: tick the camera metrics on the **Camera** tab (or click **Compute camera metrics** on the Vision tab, which opens the form there). Decoding video takes about 1 to 1.5 s per episode, and every metric is recomputed together so the profile score includes the camera group. If the last run included the camera metrics, they stay ticked on the next run.
+3. Optional: pick cameras on the **Camera** tab (or click **Compute camera metrics** on the Vision tab, which opens the form there). Every metric is recomputed together, so the profile score includes the camera group. The cameras and metrics you used stay selected on the next run.
 
 4. Open a new panel and choose **LeRobot Curation**. It refreshes whenever the view changes, so filtering the grid re-ranks the panel.
 
@@ -84,13 +84,15 @@ The footer has three tag buttons, `review`, `exclude-candidate` and `relabel`, w
 
 - **Scores are triage, not verdicts.** Smoothness and timing say nothing about whether the demonstration did the right thing.
 - **Small groups.** Per-task normalization needs about 20 episodes per task. With fewer, episodes are compared across tasks and robots, and the panel shows a low-confidence banner.
-- **Unnamed joints.** Per-arm scoring, gripper metrics and the gripper timeline need named joints. Without names the plugin uses one signal over every dimension and turns the gripper metrics off.
-- **Tracking metrics** only run when the action is joint positions in the same space as the state (leader-follower teleoperation).
+- **You decide what the arrays mean.** With no arm joints picked there is no smoothness, idle or pause score, and with no gripper joints there are no gripper metrics. If the dataset's joint names are missing or wrong, you type dimension numbers instead, for example `0-6`.
+- **Tracking, acceleration-spike and joint-limit metrics** only run when you declare the action to be joint positions in the state's space (leader-follower teleoperation, for example). They read the state with the action's arm dimensions, so they need the two arrays to have the same shape.
 - **Local datasets only.** Cloud-hosted LeRobot sources are not supported yet.
 - **Large datasets.** The panel loads every episode in one call, about 3 KB each, with no pagination.
 - **Tuned on one dataset.** Default thresholds (the acceleration-spike floor, the 2% joint-limit margin, the idle threshold, the camera thresholds) were calibrated on a 102-episode development set and are not yet adjustable in the form. Check them on your own data.
 - **Temporal tags** use FiftyOne's internal `fiftyone.core.tags` API, which has no stability guarantee.
 - **Camera metrics are relative.** Each camera is compared with the same camera in other episodes, so a view that pools many robots (or a task group under 20 episodes) will flag more episodes than a single-task dataset does. A camera that cannot see the robot gets no video-action lag.
+- **At most two arms.** A robot with more arms, or with a torso, head or legs, leaves those joints unpicked.
+- **Cameras stored as images** (instead of video) cannot be read by the camera metrics and are not offered.
 - **Not built, by design:** anything that needs a model (duplicate detection by embedding, the instruction-versus-video check, task rewrites), and trimming.
 
 ## Develop and validate
@@ -98,7 +100,7 @@ The footer has three tag buttons, `review`, `exclude-candidate` and `relabel`, w
 Run from the folder that contains `lerobot_data_curation/`:
 
 ```bash
-python -m unittest discover -s lerobot_data_curation/tests -t .    # 170 tests, about 15 seconds
+python -m unittest discover -s lerobot_data_curation/tests -t .    # 252 tests, about 17 seconds
 python -m lerobot_data_curation.harness.run_harness --dataset <your dataset>   # writes harness/REPORT.md and report.json
 ```
 

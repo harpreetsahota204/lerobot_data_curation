@@ -27,7 +27,7 @@ def peak_speed(ep):
 
 - `signal` is `""` for one value per episode, or a slug such as `arm_left` for one value per arm. Set `per_signal=True` in the entry if you return several.
 - Return `{}` when the episode cannot carry the metric. Never raise for missing data; an exception is caught and recorded, but the metric then shows as failed.
-- An `EpisodeData` has `action`, `state` (each `(T, D)` or `None`), `fps`, `length`, `tasks`, `action_names`, `state_names`, `videos`, `assumptions` and more. See `engine/reader.py`. The helpers in `engine/signals.py` give you range-normalized speeds per arm (`arm_speeds`, `all_arm_speed`), gripper signals and joint-space checks.
+- An `EpisodeData` has `action`, `state` (each `(T, D)` or `None`), `fps`, `length`, `tasks`, `action_names`, `state_names`, `videos`, `groups` (the joint groups the user picked), `assumptions` and more. See `engine/reader.py`. The helpers in `engine/signals.py` give you range-normalized speeds per arm (`arm_speeds`, `all_arm_speed`), gripper signals and joint-space checks.
 - Use `MV(value, worst=None, note=None)`. `worst` is a bad-tail value for windowed metrics; `note` is a short reason shown in the panel, mostly for flags.
 
 **2. Add one entry** to `METRICS` in `engine/metrics/__init__.py`:
@@ -102,9 +102,9 @@ A profile is a named set of groups. Add one to `PROFILES` in `engine/profiles.py
 
 It is scored and written like the built-in ones (`lr_score_my_robot`, `lr_verdict_my_robot`, ...) and appears in the panel's profile dropdown.
 
-## Add a dataset-level check
+## Add something the user must pick
 
-The checks in `engine/dataset_checks.py` infer an assumption from a few episodes, show it in the compute form and let the user override it. Add a field to `SourceChecks`, infer it in `infer_source_checks`, expose it through `assumptions_for`, and read it in your metric from `ep.assumptions`. A metric that depends on an assumption should return `{}` when it is missing rather than guess.
+The plugin never infers what a dataset means. What the user tells it lives in the picks dict (`engine/picks.py`). To add a pick: add the key to `empty_picks` and `clean_picks`, add a dropdown for it in the Data tab of `resolve_input` in `operators.py` (`_dropdown` gives you a "Not set" first choice) and read it in `_collect_picks`, then expose it to metrics through `assumptions_for` and read it from `ep.assumptions`. Add a sentence to `explain_off` saying what switches off without it. A metric that needs the pick must return `{}` when it is missing, never a default. Joint groups work differently: they are attached to the episode as `ep.groups` by the reader.
 
 ## Tests
 

@@ -8,31 +8,40 @@ Three rules apply everywhere:
 - Every score is compared against a group of similar episodes (see [Normalization](#normalization)), never against the whole dataset unless a fallback says so.
 - Inside a score, every metric is oriented so that higher means worse. The tables below show each metric's raw direction.
 
-## Dataset-level checks
+## What you tell the plugin
 
-These run once before any episode metric. Each one infers a value from `info.json`, joint names and value ranges, shows it to you, and lets you confirm or override it. A metric that depends on an assumption you have not confirmed switches off and says why.
+Nothing about your dataset is guessed. The compute form asks you for the five things below. The state and action arrays start on `observation.state` and `action` when the dataset uses those LeRobot standard names; everything else starts unanswered. Anything you leave unanswered switches off the metrics that need it, and the form lists which. Your picks are stored with the run, so the next run starts from them.
 
-| Check | What it decides | Why it matters |
+| You pick | What it decides | What switches off without it |
 |---|---|---|
-| `feature_map` | Which columns are state, action and cameras | Some datasets use non-standard keys. Every metric reads its arrays through this map, and a metric whose array is missing switches off |
-| `action_semantics` | Whether `action` is leader joint positions, deltas, end-effector pose or unknown | Decides whether `track_lag_ms` and `track_resid` can run |
-| `joint_units` | Degrees, radians or normalized (-100..100) | Range normalization and thresholds depend on it |
-| `gripper_convention` | Which direction is closed, and which dimensions are grippers | Needed by the gripper metrics and `sparc_phase` |
-| `camera_roles` | Wrist, top, side or ego camera, from the feature key | Used to label cameras |
-| `balance` | Episodes per canonical task and per source | Shows under-covered tasks and dominant sources. Reported, not scored |
+| **State array** and **action array** | Which of the dataset's vector arrays are the measured state and the commanded action | Every metric that reads the missing array |
+| **What the action means** | A yes/no question: is the action absolute joint positions in the state's space, or something else (deltas, end-effector poses)? Asked only when the state and action have the same number of dimensions; otherwise the action is recorded as not joint positions | Tracking (`track_resid`, `track_lag_ms`), `accel_spike_frac`, `joint_limit_frac` |
+| **Robot and joints** | Single arm or dual arm, whether it has multi-joint hands, then which joints are the arm, the gripper and the hand (a left and a right set for dual arm) | Arm smoothness, idle and pause time, camera lag (no arm joints); the gripper metrics (no gripper joints) |
+| **Gripper open direction** | Whether a high or a low gripper value means open (asked only when gripper joints are picked) | `recovery_count`, `missed_grasp_frac`, `sparc_phase` |
+| **Cameras** | Which video cameras the camera metrics run on. Cameras stored as images cannot be read and are not offered | The camera metrics |
+
+Each joint field is one signal. Every joint you put in the Arm field is one arm, so a five-joint arm is one signal, not five. Joints you put in no field are ignored.
+
+- **Arm:** scored for smoothness, and used for idle and pause detection and for tracking. Stored as `arm_all` for a single arm, or `arm_left` and `arm_right`.
+- **Gripper:** an open/close dimension. Feeds the gripper metrics and is left out of arm speed. Several dimensions in one gripper field are averaged into one signal. In a dual-arm layout a gripper belongs to the arm on its own side.
+- **Hand:** a multi-joint end effector, such as a 22-joint dexterous hand. Scored for smoothness as its own signal (`hand_all`, `hand_left`, `hand_right`), left out of arm speed, and given no gripper metrics.
+
+In the form, joints are chips in an input field, in the same style as the cameras. When the dataset gives joint names you pick joints by name (with their observed range from `stats.json` beside them), or pick a whole named group in one click (`left_arm_q_0` to `left_arm_q_6` is the shortcut `left_arm_q`). A joint used in one field disappears from the others. When the names are missing or unusable you type dimension numbers instead, such as `0-6` or `0-2, 5`.
+
+The dataset's balance (episodes per task and per source) is reported on the Integrity & Coverage tab. It is a count, not a pick.
 
 ## Signals: which array each metric reads
 
 | Metric family | Reads | Why |
 |---|---|---|
-| Smoothness (`sparc`, `ldlj`, `sparc_phase`, `jerk_rms`, `psd_lf_hf`) | `action` by default, with a signal picker | `action` is what a policy learns to output. On leader-follower rigs (SO-100, Koch, ALOHA) it is the operator's hand, not the robot. `observation.state` is selectable |
-| Contact and jolt (`accel_spike_frac`, `joint_limit_frac`, `track_resid`, `track_lag_ms`) | `observation.state`. Tracking metrics use both | Contact, jolts and limits happen to the follower robot, not the leader |
-| Time and gripper metrics | `action` for speed, gripper dimensions by name | Idle and pause are properties of commanded motion |
+| Smoothness (`sparc`, `ldlj`, `sparc_phase`, `jerk_rms`, `psd_lf_hf`) | the action array you picked, over the joints you put in the Arm and Hand fields | `action` is what a policy learns to output. On leader-follower rigs (SO-100, Koch, ALOHA) it is the operator's hand, not the robot |
+| Contact and jolt (`accel_spike_frac`, `joint_limit_frac`, `track_resid`, `track_lag_ms`) | the state array you picked. Tracking metrics use both. They index the state with the action's arm dimensions, so they need the action declared to be joint positions | Contact, jolts and limits happen to the follower robot, not the leader |
+| Time and gripper metrics | the action, with speed over the arm joints and the gripper joints you picked | Idle and pause are properties of commanded motion |
 
 Smoothness processing:
 
 - Each joint is range-normalized before speeds are combined, so a joint with a large range does not dominate and units do not matter.
-- Gripper dimensions are excluded from arm speed.
+- Gripper and hand dimensions are excluded from arm speed. A hand is scored on its own, so a 22-joint hand never swamps a 7-joint arm.
 - The low-pass cutoff is `min(10 Hz, 0.4 x fps)`, so 30 fps data is not analyzed near Nyquist.
 - Metrics run on fixed-length windows, because LDLJ is duration-sensitive.
 
@@ -42,7 +51,7 @@ Smoothness processing:
 |---|---|---|
 | `sparc` | Spectral arc length of the speed profile: how many corrections the motion contains | Closer to 0 is smoother. Very negative is fragmented, hesitant motion. Scale-invariant, so it is the primary smoothness metric. It responds to stop-and-go motion, not to additive white noise |
 | `ldlj` | Log dimensionless jerk of the speed profile | Closer to 0 is smoother. Responds to white noise. Noisier and duration-sensitive, so it carries half weight |
-| `sparc_phase` (opt-in) | SPARC inside each gripper-delimited phase, rolled up by median | Same reading as `sparc`. Stops contact transitions from counting as roughness. Needs a confirmed gripper dimension. Phases with too few samples are skipped |
+| `sparc_phase` (opt-in) | SPARC inside each gripper-delimited phase, rolled up by median | Same reading as `sparc`. Stops contact transitions from counting as roughness. Needs gripper joints, the open direction, and an arm (on a dual-arm robot, the arm on the gripper's own side). Phases with too few samples are skipped |
 | `jerk_rms` (opt-in, never scored) | RMS jerk after a low-pass filter | Lower is smoother. Noise-sensitive and correlated with the others |
 | `psd_lf_hf` (opt-in, never scored) | Log ratio of low- to high-frequency power in the speed profile | Higher is smoother. Unreliable at LeRobot frame rates, where tremor sits near Nyquist |
 
@@ -66,7 +75,7 @@ Each scored motion metric also has a worst-window value, so one bad stretch is n
 
 | Metric | What it measures | How to read it |
 |---|---|---|
-| `track_lag_ms` | Delay between the commanded `action` and the achieved `state`, from cross-correlation | Mostly a hardware property, so it is summarized per dataset or session. Only episodes far from the dataset median are flagged, and it never enters a score. Runs only when `action_semantics` says action and state share a joint space |
+| `track_lag_ms` | Delay between the commanded `action` and the achieved `state`, from cross-correlation | Mostly a hardware property, so it is summarized per dataset or session. Only episodes far from the dataset median are flagged, and it never enters a score. Runs only when you declare the action to be joint positions in the state's space |
 | `track_resid` | Per-joint normalized gap between action and state after lag alignment, with each joint's median offset removed first (arm joints only) | High means the robot is not reaching what was commanded (slip, collision, stall). Also raises interval flags |
 | `accel_spike_frac` | Fraction of frames where any joint's `state` acceleration exceeds median + k x MAD, with an absolute floor | High means sudden jolts, a proxy for collisions or contact. The floor stops idle joints from making every frame a spike |
 | `joint_limit_frac` (opt-in) | Share of (frame, joint) pairs within a margin (default 2% of range) of a joint limit, averaged over the joints that move in the episode | High means the operator worked near the robot's limits. Uses your limits when given, otherwise `meta/stats.json` min and max, which is a weak proxy because observed extremes always sit at the edge of the observed range |
@@ -76,7 +85,7 @@ Each scored motion metric also has a worst-window value, so one bad stretch is n
 | Metric | What it measures | How to read it |
 |---|---|---|
 | `gripper_flips_per_s` | Open/close transitions per second on gripper dimensions, with hysteresis so noise near the threshold does not count | High means chatter or a hesitant operator. Several clean cycles are often recoveries, which is why `recovery_count` exists |
-| `missed_grasp_frac` (opt-in) | Fraction of close commands where the follower closes fully with no stall residual (nothing was held) | High means empty grasps. Needs a confirmed gripper convention and is heuristic |
+| `missed_grasp_frac` (opt-in) | Fraction of close commands where the follower closes fully with no stall residual (nothing was held) | High means empty grasps. Needs gripper joints, the open direction, and an action declared to be joint positions. Heuristic |
 | `recovery_count` (never scored) | Number of detected regrasps (open, then close again near the same place) | Neutral or positive. Writes a `recovery` tag. Recovery is never penalized |
 
 ## Consistency
