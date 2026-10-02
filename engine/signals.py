@@ -1,4 +1,8 @@
-"""Turns an episode's action array into speed profiles per arm.
+"""Turns an episode's action array into speed profiles per joint group.
+
+Which dimensions are an arm, a gripper or a hand is never guessed: it comes from the
+joint groups the user picked (``episode.groups``, see ``engine/picks.py``). With no
+groups, every function here returns nothing and the metrics that need them switch off.
 
 Rules from METRICS.md (Signals):
 
@@ -6,13 +10,12 @@ Rules from METRICS.md (Signals):
   large range does not dominate and units (degrees, radians, -100..100) do not
   matter. Ranges come from ``meta/stats.json`` when present, otherwise a robust
   per-episode spread.
-- Gripper dimensions are excluded from arm speed.
-- Datasets without joint names use one ``arm:all`` signal over every dimension.
+- Gripper and hand dimensions are excluded from arm speed.
 """
 
 import numpy as np
 
-from .reader import is_named, slug, split_joint_groups
+from .picks import group_signal
 
 GRIPPER_HYSTERESIS = (0.4, 0.6)  # of the gripper's own range
 
@@ -27,37 +30,33 @@ def _joint_range(x, stats_range):
     return rng
 
 
+def _groups(ep, *roles):
+    return [g for g in (ep.groups or []) if g["role"] in roles and g["dims"]]
+
+
 def arm_index_groups(ep):
-    """``{signal_slug: [dimension indexes]}`` for the arm signals of an episode."""
+    """``{signal: [dimension indexes]}`` for the groups marked Arm, e.g. ``{"arm_left": [0, 1, 2]}``."""
     if ep.action is None:
         return {}
-    dim = ep.action.shape[1]
-    if not is_named(ep.action_names, ep.feature_map.action_key if ep.feature_map else "action"):
-        return {"arm_all": list(range(dim))}
-    groups = split_joint_groups(ep.action_names)
-    return {slug(k): idx for k, idx in groups.items() if k.startswith("arm:")}
+    return {group_signal(g): list(g["dims"]) for g in _groups(ep, "arm")}
 
 
-def arm_speeds(ep):
-    """Speed profile per arm signal: ``{signal_slug: (T-1,) array}``.
+def arm_speeds(ep, roles=("arm", "hand")):
+    """Speed profile per group of the given roles: ``{signal: (T-1,) array}``.
 
-    Speeds are in range-fractions per second.
+    Speeds are in range-fractions per second. Arms and hands are both smoothness
+    signals, each on its own, so a 22-joint hand never swamps a 7-joint arm.
     """
     if ep.action is None or len(ep.action) < 3:
         return {}
     x = ep.action / _joint_range(ep.action, ep.action_range)
     d = np.diff(x, axis=0) * ep.fps
-    return {
-        signal: np.linalg.norm(d[:, idx], axis=1)
-        for signal, idx in arm_index_groups(ep).items()
-        if idx
-    }
+    return {group_signal(g): np.linalg.norm(d[:, g["dims"]], axis=1) for g in _groups(ep, *roles)}
 
 
 def all_arm_speed(ep):
-    """One speed profile over every arm dimension, or None."""
-    groups = arm_index_groups(ep)
-    idx = sorted({i for g in groups.values() for i in g})
+    """One speed profile over every dimension marked Arm, or None. Hands and grippers are not in it."""
+    idx = arm_dims(ep)
     if not idx or ep.action is None or len(ep.action) < 3:
         return None
     x = ep.action / _joint_range(ep.action, ep.action_range)
@@ -65,13 +64,11 @@ def all_arm_speed(ep):
     return np.linalg.norm(d[:, idx], axis=1)
 
 
-def named_action_groups(ep):
-    """``{"arm:left": [idx], "gripper:left": [idx], ...}`` or {} when names are missing."""
-    if ep.action is None or ep.feature_map is None:
+def gripper_groups(ep):
+    """``{group name: [dimension indexes]}`` for the groups marked Gripper."""
+    if ep.action is None:
         return {}
-    if not is_named(ep.action_names, ep.feature_map.action_key or "action"):
-        return {}
-    return split_joint_groups(ep.action_names)
+    return {g["name"]: list(g["dims"]) for g in _groups(ep, "gripper")}
 
 
 def _unit_range(x):
@@ -83,18 +80,16 @@ def _unit_range(x):
 
 
 def gripper_signals(ep):
-    """Action gripper per side, each rescaled to [0, 1]: ``{"left": array, ...}``.
+    """Action gripper per group marked Gripper, each rescaled to [0, 1]: ``{group name: array}``.
 
-    Empty when joint names are missing (the gripper cannot be identified) or the
-    gripper never moves. The direction of "closed" is not assumed here.
+    A group whose dimensions never move is left out. The direction of "closed" is
+    not assumed here.
     """
     out = {}
-    for name, idx in named_action_groups(ep).items():
-        if not name.startswith("gripper:"):
-            continue
+    for name, idx in gripper_groups(ep).items():
         unit = _unit_range(np.mean(ep.action[:, idx], axis=1))
         if unit is not None:
-            out[name.split(":", 1)[1]] = unit
+            out[name] = unit
     return out
 
 
@@ -117,13 +112,31 @@ def gripper_transitions(unit, low=GRIPPER_HYSTERESIS[0], high=GRIPPER_HYSTERESIS
     return events
 
 
-def arm_signal_for_side(side):
-    """The arm signal slug that pairs with a gripper side."""
-    return "arm_%s" % side
+def arm_signal_for_gripper(ep, gripper_name):
+    """The arm signal a gripper group belongs to, or None when that is not stated.
+
+    The pairing is the one the user gave (the gripper group's ``arm``). With exactly
+    one arm group there is nothing to choose, so that arm is used. With several arms
+    and no stated pairing there is no answer, and the metrics that need it skip that gripper.
+    """
+    arms = _groups(ep, "arm")
+    for g in _groups(ep, "gripper"):
+        if g["name"] == gripper_name and g.get("arm"):
+            match = [a for a in arms if a["name"] == g["arm"]]
+            return group_signal(match[0]) if match else None
+    return group_signal(arms[0]) if len(arms) == 1 else None
+
+
+def group_signal_for_gripper(ep, gripper_name):
+    """The signal slug of a gripper group itself (``gripper_left``)."""
+    for g in _groups(ep, "gripper"):
+        if g["name"] == gripper_name:
+            return group_signal(g)
+    return "gripper_%s" % gripper_name
 
 
 def arm_dims(ep):
-    """Sorted dimension indexes of every arm signal (grippers excluded)."""
+    """Sorted dimension indexes of every arm group (grippers and hands excluded)."""
     return sorted({i for idx in arm_index_groups(ep).values() for i in idx})
 
 
@@ -132,31 +145,16 @@ def normalized(x, stats_range):
     return x / _joint_range(x, stats_range)
 
 
-def shares_joint_space(ep, threshold=0.8):
-    """Whether action and state look like the same joint positions.
+def shares_joint_space(ep):
+    """Whether the user said the action is joint positions in the state's space (and the shapes agree).
 
-    True when both exist with the same shape and the median per-dimension
-    correlation over arm dimensions is at least `threshold`. Tracking metrics
-    only make sense then (leader-follower joint control), so they switch off
-    otherwise (delta or end-effector actions, unknown semantics).
+    Tracking, acceleration-spike and joint-limit metrics index the state with the
+    action's dimensions, so they only make sense then. Nothing is inferred: with no
+    pick, or a pick of "other", this is False and those metrics switch off.
     """
     if ep.action is None or ep.state is None or ep.action.shape != ep.state.shape:
         return False
-    confirmed = ep.assumptions.get("action_semantics")
-    if confirmed == "joint_positions":
-        return True
-    if confirmed == "other":
-        return False
-    dims = arm_dims(ep)
-    if not dims or len(ep.action) < 10:
-        return False
-    corrs = []
-    for d in dims:
-        a, s = ep.action[:, d], ep.state[:, d]
-        if np.std(a) < 1e-9 or np.std(s) < 1e-9:
-            continue
-        corrs.append(np.corrcoef(a, s)[0, 1])
-    return bool(corrs) and float(np.nanmedian(corrs)) >= threshold
+    return ep.assumptions.get("action_semantics") == "joint_positions"
 
 
 def gripper_events(unit, low=GRIPPER_HYSTERESIS[0], high=GRIPPER_HYSTERESIS[1]):

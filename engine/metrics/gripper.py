@@ -1,14 +1,15 @@
-"""Gripper metrics. They need a named gripper dimension in the action."""
+"""Gripper metrics. They need a joint group marked Gripper in the picks."""
 
 import numpy as np
 
 from ..signals import (
     arm_dims,
-    arm_signal_for_side,
+    arm_signal_for_gripper,
     close_and_open_events,
+    gripper_groups,
     gripper_signals,
     gripper_transitions,
-    named_action_groups,
+    group_signal_for_gripper,
     normalized,
     shares_joint_space,
 )
@@ -80,17 +81,17 @@ def missed_grasp_frac(ep):
     one that closes on nothing reaches it. Compares commanded and achieved
     gripper position half a second after each close, after subtracting the
     leader-follower offset seen while the gripper was open. Needs a known
-    gripper convention, state and action sharing a joint space, and named
-    gripper dimensions. Heuristic.
+    gripper convention, an action declared to be joint positions in the state's
+    space, and a joint group marked Gripper. Heuristic.
     """
     open_is = ep.assumptions.get("gripper_open_is")
     if open_is is None or ep.state is None or not shares_joint_space(ep):
         return {}
     out = {}
-    groups = named_action_groups(ep)
+    groups = gripper_groups(ep)
     hold = max(1, int(round(HOLD_S * ep.fps)))
     for side, unit in gripper_signals(ep).items():
-        idx = groups.get("gripper:%s" % side)
+        idx = groups.get(side)
         if not idx:
             continue
         a = np.mean(ep.action[:, idx], axis=1)
@@ -115,5 +116,5 @@ def missed_grasp_frac(ep):
             else:
                 missed += 1
         if missed + held:
-            out[arm_signal_for_side(side)] = MV(missed / (missed + held))
+            out[arm_signal_for_gripper(ep, side) or group_signal_for_gripper(ep, side)] = MV(missed / (missed + held))
     return out

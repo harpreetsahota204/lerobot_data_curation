@@ -45,9 +45,12 @@ MIN_LAG_SAMPLES = 20
 
 
 def camera_windows(ep):
-    """``{signal: VideoWindow}``, with the signal ``cam_<last part of the camera key>``."""
+    """``{signal: VideoWindow}`` for the cameras the user picked, with the signal ``cam_<last part of the key>``."""
+    picked = set(ep.assumptions.get("cameras") or [])
     out = {}
     for key, window in ep.videos.items():
+        if key not in picked:
+            continue
         signal = "cam_%s" % slug(key.split(".")[-1])
         if signal in out:  # two cameras share a last part: fall back to the full key
             signal = "cam_%s" % slug(key)

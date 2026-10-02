@@ -170,7 +170,7 @@ def set_sidebar_group(dataset, fields):
     dataset.save()
 
 
-def register_run(dataset, config, norm_stats, fields, feature_maps, dataset_checks=None, balance=None, run_id=None):
+def register_run(dataset, config, norm_stats, fields, feature_maps, balance=None, run_id=None):
     """Records what produced this run's scores and the stats needed to reuse them.
 
     Overwrites on every run: this is the dataset's current scoring state, not a
@@ -182,7 +182,6 @@ def register_run(dataset, config, norm_stats, fields, feature_maps, dataset_chec
     results.norm_stats = norm_stats
     results.fields = list(fields)
     results.feature_maps = feature_maps
-    results.dataset_checks = dataset_checks or {}
     results.balance = balance or {}
     results.run_id = run_id
     dataset.save_run_results(RUN_KEY, results, overwrite=True)

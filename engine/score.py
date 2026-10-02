@@ -63,7 +63,7 @@ def compute_raw(episode, sample_id, metric_names, assumptions=None):
     """Runs the enabled metrics on one :class:`EpisodeData`.
 
     `assumptions` are the confirmed dataset-level assumptions for this episode's
-    source (see ``dataset_checks.assumptions_for``).
+    source (see ``picks.assumptions_for``).
 
     A metric whose required arrays are missing is skipped. A metric that raises
     is recorded in ``failures`` and skipped, so one bad episode never stops a

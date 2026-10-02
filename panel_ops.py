@@ -10,12 +10,12 @@ import logging
 
 import fiftyone.operators as foo
 
-from .engine import dataset_checks
+from .engine import picks as pk
 from .engine.detail import episode_detail, thumbnail_times
 from .engine.frames import frame_jpeg
 from .engine.reader import EpisodeReadError, LeRobotReader
+from .operators import _last_run_config
 from .panel_data import build_panel_data
-from .write import RUN_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -98,19 +98,14 @@ class ShowEpisodes(foo.Operator):
 
 
 class PromptVision(foo.Operator):
-    """Opens the compute form on its Camera tab, with every camera metric ticked."""
+    """Opens the compute form on its Camera tab."""
 
     @property
     def config(self):
         return foo.OperatorConfig(name="lr_prompt_vision", unlisted=True)
 
     def execute(self, ctx):
-        from .operators import camera_metric_names
-
-        ctx.trigger(
-            "lerobot-data-curation/lr_compute_quality",
-            params={"tab": "CAMERA", "camera_cfg": {"metric_%s" % name: True for name in camera_metric_names()}},
-        )
+        ctx.trigger("lerobot-data-curation/lr_compute_quality", params={"tab": "CAMERA"})
         return {}
 
 
@@ -124,22 +119,6 @@ class PromptCompute(foo.Operator):
     def execute(self, ctx):
         ctx.trigger("lerobot-data-curation/lr_compute_quality")
         return {}
-
-
-def _assumptions(dataset, source_id):
-    """The confirmed dataset-level assumptions the last run used for one source."""
-    try:
-        recorded = (dataset.load_run_results(RUN_KEY).dataset_checks or {}).get(source_id)
-    except Exception:  # noqa: BLE001 - no run record: the inspector still works
-        return {}
-    if not recorded:
-        return {}
-    checks = dataset_checks.SourceChecks(
-        action_semantics=recorded.get("action_semantics", "unknown"),
-        gripper_dims=recorded.get("gripper_dims", []),
-        gripper_open_is=recorded.get("gripper_open_is"),
-    )
-    return dataset_checks.assumptions_for(checks)
 
 
 class GetEpisodeDetail(foo.Operator):
@@ -159,17 +138,13 @@ class GetEpisodeDetail(foo.Operator):
             return {"error": "no sample_id"}
         dataset = ctx.dataset
         sample = dataset[sample_id]
-        overrides = {}
-        try:
-            overrides = dict(dataset.get_run_info(RUN_KEY).config.overrides or {})
-        except Exception:  # noqa: BLE001
-            pass
-        reader = LeRobotReader(dataset, overrides=overrides)
+        picks = _last_run_config(dataset).get("picks") or pk.empty_picks()
+        reader = LeRobotReader(dataset, picks=picks)
         episode = reader.read(sample)
         if isinstance(episode, EpisodeReadError):
             return {"error": str(episode)}
 
-        episode.assumptions = _assumptions(dataset, episode.source_id)
+        episode.assumptions = pk.assumptions_for(picks)
         detail = episode_detail(episode)
         detail["sample_id"] = sample_id
         detail["task"] = sample.task

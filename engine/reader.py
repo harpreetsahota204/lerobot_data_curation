@@ -136,6 +136,32 @@ def infer_feature_map(info, overrides=None):
     )
 
 
+def picked_feature_map(info, picks):
+    """A :class:`FeatureMap` from the user's picks alone, with no inference.
+
+    A pick that names a column this source does not have is dropped, with a note.
+    Cameras are read from the declared features (a fact, not a guess).
+    """
+    keys = _vector_keys(info)
+    notes = []
+    chosen = {}
+    for name in ("state_key", "action_key"):
+        value = (picks or {}).get(name)
+        if not value:
+            continue
+        if value in keys:
+            chosen[name] = value
+        else:
+            notes.append("%s %r is not a vector feature of this source" % (name.replace("_key", ""), value))
+    cameras = [k for k, v in info["features"].items() if v.get("dtype") in ("video", "image")]
+    return FeatureMap(
+        state_key=chosen.get("state_key"),
+        action_key=chosen.get("action_key"),
+        camera_keys=cameras,
+        notes=notes,
+    )
+
+
 @dataclass
 class VideoWindow:
     """One camera's slice of a (shared) MP4 file."""
@@ -180,6 +206,10 @@ class EpisodeData:
     # so the five camera metrics decode each video once between them.
     decoder: "object | None" = field(default=None, repr=False)
     cache: dict = field(default_factory=dict, repr=False)
+    # The user's joint groups over the action's dimensions (see engine/picks.py): a list of
+    # {"name", "role", "dims", optional "arm"}. Empty means no group was picked, and every
+    # metric that needs one switches off.
+    groups: list = field(default_factory=list)
 
 
 class EpisodeReadError(Exception):
@@ -193,10 +223,15 @@ class LeRobotReader:
         dataset: a ``media_type="multimodal"`` dataset built with
             ``fo.types.LeRobotDataset``
         overrides (None): ``{"state_key": ..., "action_key": ...}`` applied to
-            every source that has the named column
+            every source that has the named column. Only used when `picks` is None
+        picks (None): the user's picks (see ``engine/picks.py``). When given, nothing is
+            inferred: the state and action arrays are exactly the picked ones, and the
+            joint groups come from the picks. When None the arrays are inferred from
+            the standard LeRobot names, which the harness and tests rely on
     """
 
-    def __init__(self, dataset, overrides=None):
+    def __init__(self, dataset, overrides=None, picks=None):
+        self._picks = picks
         self._sources = {}
         self._maps = {}
         self._stats = {}
@@ -211,7 +246,9 @@ class LeRobotReader:
             with open(os.path.join(root, "meta", "info.json")) as f:
                 info = json.load(f)
             self._sources[src["id"]] = (src, info)
-            self._maps[src["id"]] = infer_feature_map(info, overrides)
+            self._maps[src["id"]] = (
+                picked_feature_map(info, picks) if picks is not None else infer_feature_map(info, overrides)
+            )
         if not self._sources:
             raise ValueError(
                 "Dataset has no LeRobot media sources; import it with "
@@ -235,6 +272,14 @@ class LeRobotReader:
         if source_id not in self._sources:
             raise EpisodeReadError("Unknown media source %r" % source_id)
         return source_id, self._sources[source_id][0], self._sources[source_id][1]
+
+    def _groups(self, fmap, matrix_dim):
+        """The picked joint groups that fit this source's action (none when nothing was picked)."""
+        if self._picks is None:
+            return []
+        from .picks import groups_for_source
+
+        return groups_for_source(self._picks, matrix_dim)
 
     def feature_names(self, source_id, feature):
         """Per-dimension names of a feature, with a positional fallback."""
@@ -392,6 +437,7 @@ class LeRobotReader:
             videos=videos,
             robot_type=info.get("robot_type"),
             feature_map=fmap,
+            groups=self._groups(fmap, matrix_dim=None if fmap.action_key is None else int(np.prod(info["features"][fmap.action_key]["shape"]))),
         )
 
 
@@ -425,27 +471,3 @@ def is_named(names, feature):
 def slug(text):
     """A field-name-safe version of a signal or camera name."""
     return re.sub(r"[^0-9a-zA-Z]+", "_", str(text)).strip("_").lower()
-
-
-def split_joint_groups(names):
-    """Splits dimension names into scoreable groups.
-
-    Grippers are separated from arm joints (their motion is near-binary, so
-    smoothness metrics on them are meaningless) and arms are split on a
-    ``left``/``right`` prefix when one exists.
-
-    Returns:
-        ``{"arm:left": [idx...], "arm:right": [...], "gripper:left": [...]}``;
-        a single-arm robot yields ``"arm:all"`` / ``"gripper:all"``
-    """
-    groups = {}
-    for i, name in enumerate(names):
-        lower = name.lower()
-        side = (
-            "left"
-            if lower.startswith("left")
-            else ("right" if lower.startswith("right") else "all")
-        )
-        kind = "gripper" if re.search(r"grip|finger|claw", lower) else "arm"
-        groups.setdefault("%s:%s" % (kind, side), []).append(i)
-    return groups

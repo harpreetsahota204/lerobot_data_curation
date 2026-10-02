@@ -17,6 +17,7 @@ from .signals import (
     gripper_signals,
     normalized,
     arm_dims,
+    shares_joint_space,
 )
 from . import smoothness
 
@@ -72,7 +73,7 @@ def flagged_spans(ep):
             )
 
     # acceleration spikes, clustered
-    if ep.state is not None and len(ep.state) >= 8 and arm_dims(ep):
+    if ep.state is not None and len(ep.state) >= 8 and arm_dims(ep) and shares_joint_space(ep):
         acc = tracking.state_acceleration(ep, arm_dims(ep))
         frames = np.flatnonzero(np.any(acc > tracking.spike_threshold(acc), axis=1))
         if 0 < len(frames) < 0.3 * len(acc):  # a noisy sensor is not a set of jolts

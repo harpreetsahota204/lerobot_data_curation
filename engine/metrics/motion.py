@@ -1,11 +1,11 @@
-"""Motion smoothness metrics, per arm signal, on fixed-length windows."""
+"""Motion smoothness metrics, per arm or hand signal, on fixed-length windows."""
 
 import numpy as np
 
 from .. import smoothness
 from ..activity import lowpass_cutoff
 from ..signals import (
-    arm_signal_for_side,
+    arm_signal_for_gripper,
     arm_speeds,
     gripper_signals,
     gripper_transitions,
@@ -87,15 +87,15 @@ def sparc_phase(ep):
     scoring each phase separately stops contact from being penalized as
     jitter (the idea behind RINSE's contact-aware TED metric, adapted to SPARC).
 
-    Needs a named gripper dimension. Phases shorter than the minimum sample
-    count are skipped.
+    Needs a joint group marked Gripper, and the arm it belongs to (stated, or the
+    only arm). Phases shorter than the minimum sample count are skipped.
     """
     out = {}
-    speeds = arm_speeds(ep)
+    speeds = arm_speeds(ep, roles=("arm",))
     fc = lowpass_cutoff(ep.fps)
     for side, unit in gripper_signals(ep).items():
-        signal = arm_signal_for_side(side)
-        speed = speeds.get(signal)
+        signal = arm_signal_for_gripper(ep, side)
+        speed = speeds.get(signal) if signal else None
         if speed is None:
             continue
         bounds = [0] + [i for i in gripper_transitions(unit) if 0 < i < len(speed)] + [len(speed)]

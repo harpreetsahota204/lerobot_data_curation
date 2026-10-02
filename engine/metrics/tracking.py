@@ -92,13 +92,15 @@ def track_resid(ep):
 def accel_spike_frac(ep):
     """Fraction of frames where any arm joint's state acceleration is a spike.
 
+    Needs the action declared to be joint positions in the state's space, because the
+    arm joints are picked on the action and the same dimensions are read from the state.
     A spike exceeds ``median + k x MAD`` of that joint's own |acceleration|, with
     an absolute floor so idle joints (median near 0) do not turn every frame into
     a spike. A proxy for collisions and contact; reported for review, never used
     to mask other metrics.
     """
     dims = arm_dims(ep)
-    if len(ep.state) < 8 or not dims:
+    if not shares_joint_space(ep) or len(ep.state) < 8 or not dims:
         return {}
     acc = state_acceleration(ep, dims)
     return {"": MV(float(np.mean(np.any(acc > spike_threshold(acc), axis=1))))}
@@ -112,7 +114,7 @@ def joint_limit_frac(ep):
     range). Averaged over the joints that move in this episode. Skipped when
     stats are missing.
     """
-    if ep.state_bounds is None:
+    if ep.state_bounds is None or not shares_joint_space(ep):
         return {}
     dims = arm_dims(ep)
     lo, hi = ep.state_bounds

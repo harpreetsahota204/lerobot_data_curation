@@ -116,7 +116,8 @@ export default function CurationPanel() {
           </div>
           <div style={{ fontSize: 13, color: theme.textDim, marginBottom: 16 }}>
             Run <b>LeRobot curation: compute quality</b> to score the current view for motion
-            smoothness, time efficiency, integrity and language.
+            smoothness, time efficiency, integrity and language. The form asks you which arrays and
+            joints to use first: nothing is guessed.
           </div>
           <Button label="Compute quality" primary onClick={() => promptOp.execute({})} />
         </div>
@@ -249,7 +250,8 @@ export default function CurationPanel() {
                 <div style={{ marginBottom: 14, maxWidth: 520, marginLeft: "auto", marginRight: "auto", lineHeight: 1.5 }}>
                   Camera metrics score blur, exposure, clipped pixels, frozen feeds and video-action lag. They decode
                   video, so they take longer than the other metrics. The button opens the compute form on its Camera tab,
-                  and a run re-ranks every episode with the camera group included.
+                  where you pick which cameras to score, and a run re-ranks every episode with the camera group
+                  included.
                 </div>
                 <Button label="Compute camera metrics" primary onClick={() => visionOp.execute({})} />
               </div>
