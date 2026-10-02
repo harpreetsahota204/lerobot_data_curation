@@ -97,10 +97,10 @@ The panel is React (`src/`), built with Vite. The tabs are handwritten; there is
 A profile is a named set of groups. Add one to `PROFILES` in `engine/profiles.py`:
 
 ```python
-"my_robot": {"label": "My robot", "groups": ["motion", "tracking"], "language_forces_review": False},
+"my_robot": {"label": "My robot", "groups": ["motion", "tracking"]},
 ```
 
-It is scored and written like the built-in ones (`lr_score_my_robot`, `lr_verdict_my_robot`, ...) and appears in the panel's profile dropdown.
+It is scored and written like the built-in ones (`lr_score_my_robot`, `lr_verdict_my_robot`, ...) and a Profile dropdown appears in the panel header (it is hidden while there is only one profile).
 
 ## Add something the user must pick
 

@@ -12,7 +12,7 @@ const EXPLAINERS = {
     "Static checks on the task string, no model needed. Warn means the string is missing, is a placeholder " +
     "such as 'task desc' or 'Hold', has fewer than 3 words, or (for English text) names no action. A " +
     "vision-language model will not learn what the demonstration shows from such an instruction. These " +
-    "flags never enter a score, but the VLA profile raises an episode to at least warn. Click a bar to filter.",
+    "flags never enter the score; they matter when you fine-tune a VLA, so read them alongside it. Click a bar to filter.",
   table:
     "Episodes with a weak task string first. The reason column says which check fired. Click a row to " +
     "inspect the episode.",

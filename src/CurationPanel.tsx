@@ -8,7 +8,7 @@ import LanguageTab from "./LanguageTab";
 import MetricGrid from "./MetricGrid";
 import OverviewTab from "./OverviewTab";
 import { theme } from "./theme";
-import { Banner, Button, Card, Tabs } from "./ui";
+import { Banner, Button, Card, IconButton, Tabs } from "./ui";
 import { PanelData, PLUGIN } from "./types";
 
 const TABS = [
@@ -43,7 +43,8 @@ export default function CurationPanel() {
   const [data, setData] = useState<PanelData | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [profile, setProfile] = useState<string | null>(null);
-  const [task, setTask] = useState("");
+  // null is "all tasks"; "" is the episodes that have no task string.
+  const [task, setTask] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const profilePicked = useRef(false);
   const inspectorRef = useRef<HTMLDivElement>(null);
@@ -69,7 +70,7 @@ export default function CurationPanel() {
   );
 
   const rows = useMemo(
-    () => (data?.rows ?? []).filter((r) => !task || r.task === task),
+    () => (data?.rows ?? []).filter((r) => task === null || r.task === task),
     [data, task]
   );
 
@@ -164,6 +165,7 @@ export default function CurationPanel() {
           </div>
         )}
         <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+          {data.profiles.length > 1 && (
           <label style={{ fontSize: 11, color: theme.textDim }}>
             Profile{" "}
             <select
@@ -181,17 +183,23 @@ export default function CurationPanel() {
               ))}
             </select>
           </label>
+          )}
           <label style={{ fontSize: 11, color: theme.textDim }}>
             Task{" "}
-            <select style={selectStyle} value={task} onChange={(e) => setTask(e.target.value)}>
-              <option value="">All tasks ({data.rows.length})</option>
+            <select
+              style={selectStyle}
+              value={task === null ? "all" : `task:${task}`}
+              onChange={(e) => setTask(e.target.value === "all" ? null : e.target.value.slice("task:".length))}
+            >
+              <option value="all">All tasks ({data.rows.length})</option>
               {data.tasks.map((t) => (
-                <option key={t.task} value={t.task}>
+                <option key={t.task} value={`task:${t.task}`}>
                   {(t.task || "(no task)").slice(0, 60)} ({t.n})
                 </option>
               ))}
             </select>
           </label>
+          {task !== null && <IconButton icon="close" title="Clear task filter" size={22} onClick={() => setTask(null)} />}
         </div>
         <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
       </div>
@@ -203,7 +211,6 @@ export default function CurationPanel() {
             rows={rows}
             profile={activeProfile}
             onSelect={setSelectedId}
-            onOpen={openEpisode}
             onShow={showEpisodes}
             selectedId={selectedId}
           />

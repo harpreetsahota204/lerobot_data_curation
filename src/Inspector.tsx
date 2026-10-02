@@ -12,7 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { fmt, signalColor, theme, verdictColor } from "./theme";
-import { Button, Card, Chip, DataTable } from "./ui";
+import { Button, Card, Chip, DataTable, IconButton } from "./ui";
 import { EpisodeDetail, label, PanelData, PLUGIN, Row, Span } from "./types";
 
 const SPAN_COLORS: Record<string, string> = {
@@ -80,6 +80,7 @@ export default function Inspector(props: {
 }) {
   const { data, row, profile, onOpenViewer, onClose } = props;
   const op = useOperatorExecutor(`${PLUGIN}/lr_get_episode_detail`);
+  const computeOp = useOperatorExecutor(`${PLUGIN}/lr_prompt_compute`);
   const [joints, setJoints] = useState<number[]>([]);
 
   useEffect(() => {
@@ -141,9 +142,9 @@ export default function Inspector(props: {
       title={`Inspector · ${row.episode}`}
       subtitle={row.task || "(no task)"}
       action={
-        <span style={{ display: "inline-flex", gap: 8 }}>
-          <Button label="Open in viewer" primary onClick={() => onOpenViewer(row.id)} />
-          <Button label="Close" onClick={onClose} />
+        <span style={{ display: "inline-flex", gap: 2 }}>
+          <IconButton icon="openInNew" title="Open in viewer" onClick={() => onOpenViewer(row.id)} />
+          <IconButton icon="close" title="Close inspector" onClick={onClose} />
         </span>
       }
     >
@@ -172,6 +173,27 @@ export default function Inspector(props: {
         <div style={{ color: theme.textDim, fontSize: 12, padding: 16 }}>Loading episode…</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {detail.missing?.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "8px 12px",
+                borderRadius: 6,
+                border: `1px solid ${theme.cardBorder}`,
+                fontSize: 12,
+                color: theme.textDim,
+              }}
+            >
+              <span>
+                Some charts are missing because the last Compute quality run did not have these picks.{" "}
+                {detail.missing.join(" ")} Pick them on the form's Data tab and run it again.
+              </span>
+              <Button label="Open Compute quality" onClick={() => computeOp.execute({})} />
+            </div>
+          )}
           {detail.spans.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {detail.spans.map((s, i) => (

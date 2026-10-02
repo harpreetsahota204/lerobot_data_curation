@@ -36,7 +36,7 @@ Roles:
 Joints the user puts in no field are ignored.
 """
 
-import re
+from collections import Counter
 
 from .reader import is_named, slug
 
@@ -48,7 +48,7 @@ DEFAULT_LAYOUT = "single"
 STANDARD_ARRAYS = {"state_key": "observation.state", "action_key": "action"}
 ROLE_HELP = {
     "arm": "The joints that move the arm. Scored for smoothness, idle and pause time, and tracking.",
-    "gripper": "The open/close dimension. Several dimensions are averaged into one gripper signal.",
+    "gripper": "The open/close dimension, usually the one whose range spans two fixed values. Several are averaged into one gripper signal.",
     "hand": "The joints of a multi-joint hand. Scored for smoothness on its own, with no gripper metrics.",
 }
 
@@ -131,59 +131,29 @@ def dims_by_field(layout, groups):
 # -- choosing joints ----------------------------------------------------------------
 
 
-def names_usable(names, feature):
-    """Whether the dataset gave real, distinct per-dimension names for `feature`."""
-    return is_named(names, feature) and len(set(names)) == len(names)
+def joint_chips(names, feature):
+    """One unique chip per dimension of `feature`, for the joint pickers.
+
+    The dataset's name when it gives distinct names; the name plus its position when a
+    name repeats (``joint (action[3])``); the position alone (``action[3]``) when the
+    dataset gives no names. LeRobot's ``info.json`` names are optional and never say what
+    a joint is for, so nothing beyond the label is read from them.
+    """
+    if not is_named(names, feature):
+        return ["%s[%d]" % (feature, i) for i in range(len(names))]
+    counts = Counter(names)
+    return [str(n) if counts[n] == 1 else "%s (%s[%d])" % (n, feature, i) for i, n in enumerate(names)]
 
 
-def dims_from_names(values, names):
-    """Dimension indexes of the picked joint names. Names the array does not have are ignored."""
-    index = {str(n): i for i, n in enumerate(names)}
+def dims_from_chips(values, chips):
+    """Dimension indexes of the picked chips. Chips the array does not have are ignored."""
+    index = {c: i for i, c in enumerate(chips)}
     return sorted({index[str(v)] for v in values or [] if str(v) in index})
 
 
-def names_for_dims(dims, names):
-    """The joint names of `dims`, in dimension order, to refill a field from the last run."""
-    return [str(names[d]) for d in sorted(set(dims or [])) if d < len(names)]
-
-
-def describe_dims(dims):
-    """``"0-6"`` or ``"3"`` or ``"0-2, 5"`` for a list of dimension indexes."""
-    dims = sorted(dims)
-    parts, start = [], None
-    for i, d in enumerate(dims):
-        if start is None:
-            start = prev = d
-        elif d == prev + 1:
-            prev = d
-        else:
-            parts.append((start, prev))
-            start = prev = d
-        if i == len(dims) - 1:
-            parts.append((start, prev))
-    return ", ".join("%d" % a if a == b else "%d-%d" % (a, b) for a, b in parts)
-
-
-def parse_dim_list(text, dim):
-    """Parses ``"0-6"`` or ``"0-2, 5"`` into dimension indexes, for arrays with no usable names.
-
-    Returns ``(dims, errors)``.
-    """
-    dims, errors = set(), []
-    cleaned = re.sub(r"\s*-\s*", "-", text or "")
-    for item in re.split(r"[,\s;]+", cleaned):
-        if not item:
-            continue
-        m = re.fullmatch(r"(\d+)(?:-(\d+))?", item)
-        if not m:
-            errors.append("Could not read %r. Write dimensions like '0-6' or '0-2, 5'." % item)
-            continue
-        a, b = int(m.group(1)), int(m.group(2) if m.group(2) else m.group(1))
-        if b < a or b >= dim:
-            errors.append("%r is outside the %d dimensions of this array (0 to %d)." % (item, dim, dim - 1))
-            continue
-        dims |= set(range(a, b + 1))
-    return sorted(dims), errors
+def chips_for_dims(dims, chips):
+    """The chips of `dims`, in dimension order, to refill a field from the last run."""
+    return [chips[d] for d in sorted(set(dims or [])) if d < len(chips)]
 
 
 # -- what the engine reads ---------------------------------------------------------
@@ -206,7 +176,7 @@ def groups_for_source(picks, action_dim):
 
 
 def assumptions_for(picks):
-    """The per-source assumptions dict metrics read from ``episode.assumptions``."""
+    """The assumptions dict metrics read from ``episode.assumptions``, the same for every source."""
     picks = clean_picks(picks)
     out = {}
     if picks["action_semantics"]:

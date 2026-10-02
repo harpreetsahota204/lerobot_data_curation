@@ -160,4 +160,18 @@ class GetEpisodeDetail(foo.Operator):
                         {"camera": camera.split(".")[-1], "t": t, "jpeg": base64.b64encode(jpeg).decode("ascii")}
                     )
         detail["thumbnails"] = thumbs
+        detail["missing"] = _missing_charts(picks)
         return detail
+
+
+def _missing_charts(picks):
+    """Why charts are absent from the inspector, one sentence per missing pick."""
+    roles = {g.get("role") for g in picks.get("groups") or []}
+    out = []
+    if not (picks.get("state_key") or picks.get("action_key")):
+        out.append("No state or action array was picked, so there are no joint traces.")
+    if not picks.get("action_key") or "arm" not in roles:
+        out.append("No arm joints were picked, so there is no speed profile and no idle or pause spans.")
+    if not picks.get("action_key") or "gripper" not in roles:
+        out.append("No gripper joints were picked, so there is no gripper timeline.")
+    return out

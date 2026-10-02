@@ -62,17 +62,17 @@ Scores are batch-relative: an episode is compared with the other episodes of its
 
 ## The panel
 
-Two dropdowns sit above the tabs: **Profile** (`policy` for low-level imitation policies, `vla` for VLA fine-tuning, where a weak task string also raises the verdict to warn) and **Task**.
+A **Task** dropdown sits above the tabs. Every episode gets one score from the motion, time, tracking, gripper, consistency and (when computed) camera groups. The task-string check is a separate Language verdict with its own column: if you are fine-tuning a VLA, read it alongside the score, because a weak instruction hurts a VLA even when the motion is clean.
 
 | Tab | What it shows |
 |---|---|
-| **Overview** | Score histogram, verdict counts, episodes per task, outlier scatter, per-source summary and the worst-first ranking. |
+| **Overview** | Score histogram, verdict counts, episodes per task, outlier scatter and the worst-first ranking. |
 | **Motion & Action** | One histogram per metric (smoothness, time, tracking, gripper, consistency), signal chips to isolate one arm, and a worst-first table. |
 | **Integrity & Coverage** | Integrity verdicts, episodes per task and source, and a per-episode list of which check failed. |
 | **Vision** | The five camera metrics (blur, exposure, clipped pixels, frozen feed, video-action lag): one histogram each, camera chips to isolate one camera, and a worst-first table. Empty until the camera metrics are computed. |
 | **Language** | Static checks on the task string: missing, placeholder, too short, no action verb. |
 
-Click any bar to filter the samples grid to those episodes. Most charts have an expand button that gives one chart the full width, and an "i" icon that explains it. Click any row to open the **inspector** under the tables: every metric with its per-arm or per-camera breakdown, joint traces (action solid, state dashed), the speed profile with the idle threshold, the gripper timeline, and a few frames from the first two cameras, picked around the flagged spans. **Open in viewer** opens the episode in the multimodal viewer.
+Click any bar to filter the samples grid to those episodes. Most charts have an expand button that gives one chart the full width, and an "i" icon that explains it. Click any row to open the **inspector** under the tables: every metric with its per-arm or per-camera breakdown, joint traces (action solid, state dashed), the speed profile with the idle threshold, the gripper timeline, and a few frames from the first two cameras, picked around the flagged spans. The icons in the inspector's top-right corner open the episode in the multimodal viewer (the square with an arrow) and close the inspector (the X).
 
 Flagged spans (idle stretches, the longest pause, the roughest smoothness window, acceleration spikes) are also written as temporal tags on each episode's timeline when their metric reaches warn, so you can scrub straight to them. Regrasp recoveries are tagged too, as information. A re-run replaces the plugin's tags and leaves tags you drew yourself alone.
 
@@ -84,7 +84,7 @@ The footer has three tag buttons, `review`, `exclude-candidate` and `relabel`, w
 
 - **Scores are triage, not verdicts.** Smoothness and timing say nothing about whether the demonstration did the right thing.
 - **Small groups.** Per-task normalization needs about 20 episodes per task. With fewer, episodes are compared across tasks and robots, and the panel shows a low-confidence banner.
-- **You decide what the arrays mean.** With no arm joints picked there is no smoothness, idle or pause score, and with no gripper joints there are no gripper metrics. If the dataset's joint names are missing or wrong, you type dimension numbers instead, for example `0-6`.
+- **You decide what the arrays mean.** With no arm joints picked there is no smoothness, idle or pause score, and with no gripper joints there are no gripper metrics. If the dataset gives no joint names, you pick joints by position (`action[0]`, `action[1]`, ...) in the same picker, using the range beside each one to tell them apart.
 - **Tracking, acceleration-spike and joint-limit metrics** only run when you declare the action to be joint positions in the state's space (leader-follower teleoperation, for example). They read the state with the action's arm dimensions, so they need the two arrays to have the same shape.
 - **Local datasets only.** Cloud-hosted LeRobot sources are not supported yet.
 - **Large datasets.** The panel loads every episode in one call, about 3 KB each, with no pagination.

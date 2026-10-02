@@ -145,4 +145,5 @@ export interface EpisodeDetail {
   grippers: Record<string, { t: number[]; v: number[]; events: { t: number; kind: "open" | "close" }[] }>;
   spans: Span[];
   thumbnails: { camera: string; t: number; jpeg: string }[];
+  missing: string[];
 }

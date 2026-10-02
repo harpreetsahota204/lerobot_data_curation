@@ -34,16 +34,11 @@ GROUPS = {
     },
 }
 
+# Language flags are never part of a profile: they are a separate verdict the user reads alongside.
 PROFILES = {
     "policy": {
-        "label": "Policy (ACT, Diffusion Policy)",
+        "label": "All metric groups",
         "groups": ["motion", "time", "tracking", "gripper", "consistency", "camera"],
-        "language_forces_review": False,
-    },
-    "vla": {
-        "label": "VLA (instruction must match)",
-        "groups": ["motion", "time", "tracking", "gripper", "consistency", "camera"],
-        "language_forces_review": True,
     },
 }
 
@@ -64,13 +59,12 @@ def group_values(metric_z, groups):
     return out
 
 
-def score_profile(metric_z, profile, language_flagged=False):
+def score_profile(metric_z, profile):
     """Scores one episode under one profile.
 
     Args:
         metric_z: ``{metric: oriented z}`` for this episode (higher is worse)
         profile: a key of :data:`PROFILES`
-        language_flagged: whether a language flag is set on this episode
 
     Returns:
         ``{"score", "n_flags", "driver", "verdict"}``. ``score`` is None and the
@@ -79,13 +73,10 @@ def score_profile(metric_z, profile, language_flagged=False):
     spec = PROFILES[profile]
     values = group_values(metric_z, spec["groups"])
     if not values:
-        verdict = "warn" if (spec["language_forces_review"] and language_flagged) else "unknown"
-        return {"score": None, "n_flags": 0, "driver": None, "verdict": verdict}
+        return {"score": None, "n_flags": 0, "driver": None, "verdict": "unknown"}
 
     driver = max(values, key=values.get)
     score = float(values[driver])
     n_flags = sum(1 for v in values.values() if v >= normalize.WARN_Z)
     verdict = normalize.severity(score) or "pass"
-    if spec["language_forces_review"] and language_flagged and verdict == "pass":
-        verdict = "warn"
     return {"score": score, "n_flags": n_flags, "driver": driver, "verdict": verdict}

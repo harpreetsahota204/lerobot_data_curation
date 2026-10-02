@@ -16,18 +16,12 @@ const EXPLAINERS = {
     "whole view. Dashed lines mark warn and fail. Click a bar to filter the samples panel to " +
     "those episodes.",
   verdicts:
-    "Profile verdicts: fail at score >= 3, warn at >= 2, otherwise pass. Under the VLA profile a " +
-    "weak task instruction also forces at least warn. Integrity and Language are separate checks " +
-    "that never enter the score. Click a bar to filter the samples panel.",
+    "Profile verdicts: fail at score >= 3, warn at >= 2, otherwise pass. Integrity and Language are " +
+    "separate checks that never enter the score: if you are fine-tuning a VLA, also read the Language " +
+    "column, since a weak task instruction hurts it even when the motion is clean. Click a bar to filter " +
+    "the samples panel.",
   tasks:
     "Episodes per task, largest first. Amber bars are tasks with too few episodes to normalize on their own. Click a bar to filter to that task.",
-  sources: "Episodes, mean score and flagged count per source. Click a row to filter to that source.",
-  meanScore:
-    "The average of the selected profile's score over this source's episodes in the current view. The score " +
-    "is each episode's worst metric-group z-score (higher is worse), so a source with a few very bad episodes " +
-    "can show a high mean. Read it with the Warn or fail column. Episodes without a score are left out. " +
-    "Scores are measured against each episode's own task, or against the whole view for small tasks, so " +
-    "comparing sources also compares what tasks and robots they contain.",
   score:
     "The selected profile's score: for each metric group (motion, time, tracking, gripper, consistency, and camera when it was computed) take " +
     "the worst weighted robust z-score of its metrics, then take the highest group value. It is a worst-of, " +
@@ -64,11 +58,10 @@ export default function OverviewTab(props: {
   rows: Row[];
   profile: string;
   onSelect: (id: string) => void;
-  onOpen: (id: string) => void;
   onShow: ShowEpisodes;
   selectedId: string | null;
 }) {
-  const { data, rows, profile, onSelect, onOpen, onShow, selectedId } = props;
+  const { data, rows, profile, onSelect, onShow, selectedId } = props;
   // One chart can take the whole row, like the histograms on the Motion & Action tab.
   const [expanded, setExpanded] = React.useState<string | null>(null);
   const toggle = (id: string) => (
@@ -93,14 +86,6 @@ export default function OverviewTab(props: {
   const taskItems = [...taskCounts.entries()]
     .map(([name, c]) => ({ name: name || "(no task)", count: c }))
     .sort((a, b) => b.count - a.count);
-
-  const bySource = new Map<string, Row[]>();
-  for (const r of rows) (bySource.get(r.source) ?? bySource.set(r.source, []).get(r.source)!).push(r);
-  const sourceRows = [...bySource.entries()].map(([source, rs]) => {
-    const scores = rs.map((r) => r.profiles[profile]?.score).filter((s): s is number => s != null);
-    const flagged = rs.filter((r) => ["warn", "fail"].includes(r.profiles[profile]?.verdict ?? "")).length;
-    return { source, n: rs.length, mean: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null, flagged };
-  }).sort((a, b) => (b.mean ?? -Infinity) - (a.mean ?? -Infinity));
 
   const hasOutliers = rows.some((r) => r.values.iforest_score != null);
 
@@ -176,20 +161,6 @@ export default function OverviewTab(props: {
           </Card>
         )}
       </div>
-
-      <Card title="Per-source summary" subtitle={`${sourceRows.length} source(s) · click a row to filter`} info={EXPLAINERS.sources}>
-        <DataTable
-          columns={[
-            { key: "source", label: "Source" },
-            { key: "n", label: "Episodes", align: "right" },
-            { key: "mean", label: "Mean score", align: "right", info: EXPLAINERS.meanScore },
-            { key: "flagged", label: "Warn or fail", align: "right" },
-          ]}
-          rowKeys={sourceRows.map((s) => s.source)}
-          rows={sourceRows.map((s) => ({ source: s.source, n: s.n, mean: fmt(s.mean), flagged: s.flagged }))}
-          onRowClick={(source) => onShow(rows.filter((r) => r.source === source).map((r) => r.id), `source '${source}'`)}
-        />
-      </Card>
 
       <Card title="Worst-first ranking" subtitle="Click a row to inspect the episode" info={EXPLAINERS.ranking}>
         <DataTable

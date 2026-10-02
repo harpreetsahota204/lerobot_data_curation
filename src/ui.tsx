@@ -183,6 +183,52 @@ export function Button(props: {
   );
 }
 
+// Material Design icon paths (24x24 viewBox).
+const ICONS = {
+  close: "M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
+  openInNew:
+    "M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
+};
+
+export function IconButton(props: { icon: keyof typeof ICONS; title: string; onClick: () => void; size?: number }) {
+  const size = props.size ?? 28;
+  return (
+    <button
+      onClick={props.onClick}
+      title={props.title}
+      aria-label={props.title}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: size,
+        height: size,
+        padding: 0,
+        background: "transparent",
+        border: "none",
+        borderRadius: 6,
+        color: theme.textDim,
+        cursor: "pointer",
+        transition: "background 120ms, color 120ms",
+      }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.background = "rgba(255, 255, 255, 0.08)";
+        el.style.color = theme.text;
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.background = "transparent";
+        el.style.color = theme.textDim;
+      }}
+    >
+      <svg width={Math.round(size * 0.64)} height={Math.round(size * 0.64)} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+        <path d={ICONS[props.icon]} />
+      </svg>
+    </button>
+  );
+}
+
 export function Banner(props: { children: React.ReactNode }) {
   return (
     <div

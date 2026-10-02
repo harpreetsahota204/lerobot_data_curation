@@ -11,8 +11,6 @@ import logging
 import uuid
 from collections import Counter
 
-import numpy as np
-
 import fiftyone.operators as foo
 import fiftyone.operators.types as types
 
@@ -21,7 +19,7 @@ from .engine import dataset_checks
 from .engine import picks as pk
 from .engine.groups import DEFAULT_MIN_GROUP, canonical_task
 from .engine.metrics import METRICS
-from .engine.reader import EpisodeReadError, LeRobotReader
+from .engine.reader import EpisodeReadError, LeRobotReader, is_named
 from .engine.score import CONFIG_VERSION, compute_raw, finalize
 
 logger = logging.getLogger(__name__)
@@ -161,17 +159,14 @@ def _first_source(reader):
     return sid, reader.info(sid)
 
 
-def _action_layout(reader, sid, info, action_key):
-    """How the picked action array can be described: by joint names, or by dimension numbers."""
+def _action_layout(reader, sid, action_key):
+    """The picked action array's joints: one chip per dimension, whether the dataset names them, and their ranges."""
     if not action_key:
         return None
-    dim = int(np.prod(info["features"][action_key]["shape"]))
     names = reader.feature_names(sid, action_key)
-    usable = pk.names_usable(names, action_key)
     return {
-        "dim": dim,
-        "names": names,
-        "usable": usable,
+        "chips": pk.joint_chips(names, action_key),
+        "named": is_named(names, action_key),
         "bounds": reader.feature_bounds(sid, action_key),
     }
 
@@ -193,27 +188,14 @@ def _shown_fields(layout_choice, hands):
 
 
 def _joint_dims(ctx, layout_choice, hands, layout, last_picks, action_key):
-    """``({field key: [dims]}, errors)`` from the form's joint fields, falling back to the last run's groups."""
+    """``{field key: [dims]}`` from the form's joint fields, falling back to the last run's groups."""
     gcfg = ctx.params.get("groups_cfg") or {}
     same = (last_picks or {}).get("action_key") == action_key and (last_picks or {}).get("layout") == layout_choice
     fallback = pk.dims_by_field(layout_choice, (last_picks or {}).get("groups") if same else [])
-    out, errors, used = {}, [], {}
-    for f in _shown_fields(layout_choice, hands):
-        dims = fallback[f["key"]]
-        if f["key"] in gcfg:
-            if layout["usable"]:
-                dims = pk.dims_from_names(gcfg[f["key"]], layout["names"])
-            else:
-                dims, errs = pk.parse_dim_list(gcfg[f["key"]], layout["dim"])
-                errors += ["%s: %s" % (f["label"], e) for e in errs]
-        if not layout["usable"]:
-            clash = sorted(d for d in dims if d in used)
-            if clash:
-                errors.append("%s: dimension %s is already in %s." % (f["label"], pk.describe_dims(clash), used[clash[0]]))
-        for d in dims:
-            used.setdefault(d, f["label"])
-        out[f["key"]] = dims
-    return out, errors
+    return {
+        f["key"]: pk.dims_from_chips(gcfg[f["key"]], layout["chips"]) if f["key"] in gcfg else fallback[f["key"]]
+        for f in _shown_fields(layout_choice, hands)
+    }
 
 
 def _picked_cameras(ctx, last_picks):
@@ -237,7 +219,7 @@ def _wants_hands(rcfg, last):
 
 
 def _collect_picks(ctx, reader):
-    """``(picks, errors, layout, field_dims)`` from the form, defaulting to the last run's picks.
+    """``(picks, layout, field_dims)`` from the form, defaulting to the last run's picks.
 
     Nothing is inferred from the data. `layout` describes the picked action array (None
     until one is picked) and `field_dims` is ``{joint field key: [dims]}`` for the
@@ -260,22 +242,20 @@ def _collect_picks(ctx, reader):
     elif picks["state_key"] and picks["action_key"]:
         picks["action_semantics"] = _pick_value(cfg, "action_semantics", last, [v for v, _ in ACTION_MEANINGS])
 
-    layout = _action_layout(reader, sid, info, picks["action_key"])
-    errors, field_dims = [], {}
+    layout = _action_layout(reader, sid, picks["action_key"])
+    field_dims = {}
     if layout is not None:
         hands = _wants_hands(rcfg, last)
-        field_dims, errors = _joint_dims(ctx, picks["layout"], hands, layout, last, picks["action_key"])
+        field_dims = _joint_dims(ctx, picks["layout"], hands, layout, last, picks["action_key"])
         picks["groups"] = pk.assemble_groups(picks["layout"], field_dims)
     if any(g["role"] == "gripper" for g in picks["groups"]):
         picks["gripper_open_is"] = _pick_value(gcfg, "gripper_open_is", last, [v for v, _ in OPEN_DIRECTIONS])
     picks["cameras"] = [c for c in _picked_cameras(ctx, last) if c in facts["cameras"]]
-    return picks, errors, layout, field_dims
+    return picks, layout, field_dims
 
 
-def _facts_line(reader):
+def _facts_line(facts, n_sources):
     """One line of what the dataset declares: robot, fps, arrays and cameras."""
-    sid, info = _first_source(reader)
-    facts = dataset_checks.declared_facts(info)
     parts = ["**%s**" % (facts["robot_type"] or "robot not stated"), "%s fps" % (facts["fps"] or "?")]
     parts.append(", ".join("`%s` (%d)" % a for a in facts["arrays"]) or "no arrays")
     cameras = "%d video camera(s)" % len(facts["cameras"])
@@ -283,10 +263,8 @@ def _facts_line(reader):
         cameras += ", %d stored as images (not scorable)" % len(facts["image_cameras"])
     parts.append(cameras)
     line = " · ".join(parts)
-    if len(reader.source_ids) > 1:
-        line += "\n\n%d sources: choices are listed from the first and apply to every source with the same arrays." % len(
-            reader.source_ids
-        )
+    if n_sources > 1:
+        line += "\n\n%d sources: choices are listed from the first and apply to every source with the same arrays." % n_sources
     return line
 
 
@@ -301,7 +279,7 @@ def _readiness_markdown(picks, camera_metrics_selected):
 
 def _joint_label(layout, d):
     """A joint's choice label: its name and, when the dataset has stats, its observed range."""
-    label = str(layout["names"][d])
+    label = layout["chips"][d]
     bounds = layout.get("bounds")
     if bounds is not None and d < len(bounds[0]):
         label += " · %.3g to %.3g" % (bounds[0][d], bounds[1][d])
@@ -309,24 +287,15 @@ def _joint_label(layout, d):
 
 
 def _joint_field(gsec, f, layout, field_dims):
-    """One joint field: chips for a named array, a text box of dimension numbers for an unnamed one."""
-    dims = field_dims.get(f["key"], [])
-    if not layout["usable"]:
-        gsec.type.str(
-            f["key"],
-            default=pk.describe_dims(dims) if dims else "",
-            label=f["label"],
-            description="%s Dimension numbers like '0-6' or '0-2, 5'." % f["help"],
-        )
-        return
+    """One joint field: pick joints as chips, the same way cameras are picked."""
     # A joint picked in any field leaves every field's list, so no joint can be in two fields.
     taken = {d for ds in field_dims.values() for d in ds}
     choices = types.AutocompleteView()
-    for d in range(layout["dim"]):
+    for d, chip in enumerate(layout["chips"]):
         if d not in taken:
-            choices.add_choice(str(layout["names"][d]), label=_joint_label(layout, d))
+            choices.add_choice(chip, label=_joint_label(layout, d))
     gsec.type.list(
-        f["key"], types.String(), default=pk.names_for_dims(dims, layout["names"]), view=choices,
+        f["key"], types.String(), default=pk.chips_for_dims(field_dims.get(f["key"]), layout["chips"]), view=choices,
         label=f["label"], description=f["help"],
     )
 
@@ -447,10 +416,10 @@ class ComputeQuality(foo.Operator):
             return types.Property(inputs)
 
         reader = LeRobotReader(ctx.dataset)  # for what the dataset declares; nothing is inferred from it
-        picks, errors, layout, field_dims = _collect_picks(ctx, reader)
-        sid, info = _first_source(reader)
-        facts = dataset_checks.declared_facts(info)
+        picks, layout, field_dims = _collect_picks(ctx, reader)
+        facts = dataset_checks.declared_facts(_first_source(reader)[1])
         last = _last_run_config(ctx.dataset)
+        selected = _selected_metrics(ctx)
         hands = _wants_hands(ctx.params.get("robot_cfg") or {}, last.get("picks"))
 
         tabs = types.TabsView()
@@ -462,7 +431,7 @@ class ComputeQuality(foo.Operator):
         tab = ctx.params.get("tab", "DATA")
 
         if tab == "DATA":
-            inputs.md(_facts_line(reader), name="facts")
+            inputs.md(_facts_line(facts, len(reader.source_ids)), name="facts")
 
             rsec = inputs.obj("robot_cfg", view=types.GridView(orientation="vertical", gap=2))
             _radio(rsec, "layout", pk.LAYOUTS, picks["layout"], "Arms", "Select how many arms the robot has.")
@@ -508,18 +477,17 @@ class ComputeQuality(foo.Operator):
                 )
 
             inputs.md("---", name="groups_rule")
-            inputs.view("groups_header", types.Header(label="Joints", description="Joints you leave out are ignored."))
+            joints_help = "Put each joint of the action in the field for what it moves. Joints you leave out are ignored."
+            if layout is not None and not layout["named"]:
+                joints_help += (
+                    " This dataset does not name its joints, so they are listed by position (%s[0] to %s[%d]). "
+                    "The range beside each one helps tell them apart: a gripper usually moves between two fixed "
+                    "values, such as 0 to 1." % (picks["action_key"], picks["action_key"], len(layout["chips"]) - 1)
+                )
+            inputs.view("groups_header", types.Header(label="Joints", description=joints_help))
             if layout is None:
                 inputs.view("groups_hint", types.Notice(label="Pick an action array above to describe its joints."))
             else:
-                if not layout["usable"]:
-                    inputs.view(
-                        "names_notice",
-                        types.Notice(
-                            label="This array has no usable joint names, so give dimension numbers instead. "
-                            "It has %d dimensions (0 to %d)." % (layout["dim"], layout["dim"] - 1)
-                        ),
-                    )
                 gsec = inputs.obj("groups_cfg", view=types.GridView(orientation="vertical", gap=2))
                 fields = _shown_fields(picks["layout"], hands)
                 has_gripper = any(g["role"] == "gripper" for g in picks["groups"])
@@ -529,13 +497,11 @@ class ComputeQuality(foo.Operator):
                     if has_gripper and i == last_gripper:
                         _radio(
                             gsec, "gripper_open_is", OPEN_DIRECTIONS, picks["gripper_open_is"], "Gripper open direction",
-                            "Needed for regrasp recovery, missed grasps and gripper phases.",
+                            "Which end of the gripper's range (shown beside it in the list) means open. Needed for regrasp recovery, missed grasps and gripper phases.",
                         )
-                if errors:
-                    inputs.view("joint_errors", types.Warning(label=" ".join(errors)))
         elif tab == "METRICS":
             section = inputs.obj("metrics_cfg", view=types.GridView(orientation="vertical", gap=2))
-            ticked = set(_selected_metrics(ctx))
+            ticked = set(selected)
             by_family = {}
             for name, spec in METRICS.items():
                 if spec["fn"] is None and spec["family"] != "outliers":
@@ -600,7 +566,6 @@ class ComputeQuality(foo.Operator):
         min_group = int((ctx.params.get("normalization") or {}).get("min_group", DEFAULT_MIN_GROUP))
         task_counts = Counter(canonical_task(t) for t in view.values("tasks"))
         pooled = sum(n for key, n in task_counts.items() if not key or n < min_group)
-        selected = _selected_metrics(ctx)
         has_camera = any(METRICS[m]["family"] == "camera" for m in selected)
         inputs.md(_readiness_markdown(picks, has_camera), name="readiness")
         inputs.view(
@@ -628,14 +593,12 @@ class ComputeQuality(foo.Operator):
         min_group = int((ctx.params.get("normalization") or {}).get("min_group", DEFAULT_MIN_GROUP))
         metric_names = _selected_metrics(ctx)
 
-        picks, errors, _, _ = _collect_picks(ctx, LeRobotReader(ctx.dataset))
-        if errors:
-            raise ValueError("Fix the joint dimensions first: %s" % " ".join(errors))
+        picks, _, _ = _collect_picks(ctx, LeRobotReader(ctx.dataset))
         reader = LeRobotReader(ctx.dataset, picks=picks)
         view = ctx.target_view()
         samples = list(view.select_fields(["media_reference"]))
         n = len(samples)
-        assumptions = {sid: pk.assumptions_for(picks) for sid in reader.source_ids}
+        assumptions = pk.assumptions_for(picks)
         has_camera = any(METRICS[m]["family"] == "camera" for m in metric_names)
         switched_off = pk.explain_off(picks, camera_metrics_selected=has_camera)
 
@@ -646,7 +609,7 @@ class ComputeQuality(foo.Operator):
             if isinstance(episode, EpisodeReadError):
                 read_errors[str(episode)[:80]] += 1
             else:
-                raw = compute_raw(episode, sample.id, metric_names, assumptions.get(episode.source_id))
+                raw = compute_raw(episode, sample.id, metric_names, assumptions)
                 raws[sample.id] = raw
                 for name in raw.failures:
                     metric_failures[name] += 1
@@ -705,7 +668,7 @@ class ComputeQuality(foo.Operator):
         verdicts = r.get("verdicts", {})
         lines = [
             "**Scored %d episode(s)**%s." % (r.get("scored", 0), " (%d skipped)" % r["skipped"] if r.get("skipped") else ""),
-            "Policy profile: %d fail, %d warn, %d pass."
+            "Score verdicts: %d fail, %d warn, %d pass."
             % (verdicts.get("fail", 0), verdicts.get("warn", 0), verdicts.get("pass", 0)),
         ]
         if r.get("pooled"):

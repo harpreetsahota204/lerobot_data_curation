@@ -291,10 +291,7 @@ def finalize(raws, metric_names, min_group=DEFAULT_MIN_GROUP):
             group_basis=basis_of[sid],
             group_n=group_n[label],
             spans=_timeline_spans(raw.spans, metric_z),
-            profiles={
-                p: score_profile(metric_z, p, language_flagged=(language == "warn"))
-                for p in PROFILES
-            },
+            profiles={p: score_profile(metric_z, p) for p in PROFILES},
             integrity_verdict=integrity,
             language_verdict=language,
         )
