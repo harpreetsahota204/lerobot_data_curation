@@ -153,39 +153,6 @@ def raw_value_at_z(z, metric_stats, higher_is_worse=True):
     return float(metric_stats["median"] + (delta if higher_is_worse else -delta))
 
 
-def aggregate(z_by_metric, weights=None):
-    """Combines already-oriented z-scores (positive == worse) into one episode score.
-
-    Args:
-        z_by_metric: a dict of metric name -> z-score (NaNs are ignored).
-            Metrics belonging to a disabled family are expected to simply be
-            absent from this dict, not present with a NaN/zero value.
-        weights: an optional dict of metric name -> weight, defaulting to
-            1.0 for any metric not listed. The weighted mean is
-            renormalized by the total weight of the metrics actually
-            present in ``z_by_metric``, so a disabled family (whose
-            metrics are absent) doesn't silently drag the score toward
-            zero -- the remaining metrics' weights are rescaled to still
-            average out over the metrics that are actually there.
-
-    Returns:
-        a tuple ``(overall_score, n_flags)``, where ``n_flags`` counts
-        z-scores at or above :data:`WARN_Z` (unweighted)
-    """
-    weights = weights or {}
-    items = [(name, z) for name, z in z_by_metric.items() if not np.isnan(z)]
-    if not items:
-        return 0.0, 0
-
-    total_weight = sum(weights.get(name, 1.0) for name, _ in items)
-    if total_weight <= 0:
-        return 0.0, 0
-
-    overall_score = sum(z * weights.get(name, 1.0) for name, z in items) / total_weight
-    n_flags = sum(1 for _, z in items if z >= WARN_Z)
-    return float(overall_score), n_flags
-
-
 def severity(z_score):
     """Returns "fail"/"warn"/None for an oriented z-score (positive == worse)."""
     if np.isnan(z_score):
@@ -195,42 +162,3 @@ def severity(z_score):
     if z_score >= WARN_Z:
         return "warn"
     return None
-
-
-def verdict_with_reason(values_by_metric, stats_by_metric, higher_is_worse_fn):
-    """Combines several metrics into one pass/warn/fail verdict, and names the cause.
-
-    "fail" if any metric's z-score is fail-severity, else "warn" if any is
-    warn-severity, else "pass". Metrics missing from ``stats_by_metric`` (or
-    with a ``None``/NaN value) are skipped.
-
-    Because :func:`severity` is monotonic in z, the highest-z metric is
-    always one at the verdict's own severity level, so blaming it is
-    consistent with the "any fail -> fail, else any warn -> warn" rule.
-
-    Args:
-        values_by_metric: a dict of metric name -> raw value
-        stats_by_metric: a dict of metric name -> fitted ``(median, scale)``
-            stats, as returned by :func:`fit`
-        higher_is_worse_fn: a callable mapping a metric name to its polarity
-
-    Returns:
-        a tuple ``(verdict, metric_name)``; ``metric_name`` is None when
-        the verdict is ``"pass"``
-    """
-    worst_name, worst_z = None, None
-    for name, value in values_by_metric.items():
-        stats = stats_by_metric.get(name)
-        if value is None or stats is None:
-            continue
-
-        z = zscore(value, stats, higher_is_worse_fn(name))
-        if np.isnan(z):
-            continue
-        if worst_z is None or z > worst_z:
-            worst_name, worst_z = name, z
-
-    sev = severity(worst_z) if worst_z is not None else None
-    if sev is None:
-        return "pass", None
-    return sev, worst_name

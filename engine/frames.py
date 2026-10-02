@@ -7,7 +7,6 @@ first frame at or after it. Works for AV1 (libdav1d) and H.264 through PyAV.
 import logging
 
 import cv2
-import numpy as np
 
 logger = logging.getLogger(__name__)
 

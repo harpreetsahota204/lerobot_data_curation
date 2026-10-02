@@ -46,15 +46,11 @@ DEFAULT_LAYOUT = "single"
 # The LeRobot v3 spec's names for the state and action arrays. The form starts on these
 # when a dataset has them: they are the format's convention, not a guess about the data.
 STANDARD_ARRAYS = {"state_key": "observation.state", "action_key": "action"}
-GROUP_PREFIX = "g:"  # a chip that stands for every joint of a named group
-
 ROLE_HELP = {
     "arm": "The joints that move the arm. Scored for smoothness, idle and pause time, and tracking.",
     "gripper": "The open/close dimension. Several dimensions are averaged into one gripper signal.",
     "hand": "The joints of a multi-joint hand. Scored for smoothness on its own, with no gripper metrics.",
 }
-
-_TRAILING_INDEX = re.compile(r"[\s_.\-\[]*\d+\]?$")
 
 
 def empty_picks():
@@ -140,44 +136,15 @@ def names_usable(names, feature):
     return is_named(names, feature) and len(set(names)) == len(names)
 
 
-def candidate_groups(names):
-    """Groups of dimensions that share a name once a trailing index is removed.
-
-    ``left_arm_q_0 ... left_arm_q_6`` becomes one group ``left_arm_q`` of 7 dimensions.
-    Names with no index stay single-dimension groups. These only feed one-click
-    shortcuts in the joint pickers: a shortcut adds its joints, it never decides a role.
-    """
-    order, dims = [], {}
-    for i, name in enumerate(names):
-        prefix = _TRAILING_INDEX.sub("", str(name)) or str(name)
-        if prefix not in dims:
-            order.append(prefix)
-            dims[prefix] = []
-        dims[prefix].append(i)
-    return [{"name": p, "dims": dims[p]} for p in order]
+def dims_from_names(values, names):
+    """Dimension indexes of the picked joint names. Names the array does not have are ignored."""
+    index = {str(n): i for i, n in enumerate(names)}
+    return sorted({index[str(v)] for v in values or [] if str(v) in index})
 
 
-def dims_from_chips(values, candidates, dim):
-    """Dimension indexes from picked chips: a joint is its index, a shortcut is ``g:<group>``."""
-    by_name = {c["name"]: c["dims"] for c in candidates}
-    dims = []
-    for v in values or []:
-        v = str(v)
-        if v.startswith(GROUP_PREFIX):
-            dims += by_name.get(v[len(GROUP_PREFIX) :], [])
-        elif v.isdigit() and int(v) < dim:
-            dims.append(int(v))
-    return sorted(set(dims))
-
-
-def chips_for_dims(dims, candidates):
-    """The chips that show `dims`: a shortcut for each fully covered multi-joint group, then single joints."""
-    left, chips = set(dims or []), []
-    for c in candidates:
-        if len(c["dims"]) > 1 and set(c["dims"]) <= left:
-            chips.append(GROUP_PREFIX + c["name"])
-            left -= set(c["dims"])
-    return chips + [str(d) for d in sorted(left)]
+def names_for_dims(dims, names):
+    """The joint names of `dims`, in dimension order, to refill a field from the last run."""
+    return [str(names[d]) for d in sorted(set(dims or [])) if d < len(names)]
 
 
 def describe_dims(dims):
@@ -301,8 +268,9 @@ def readiness(picks, camera_metrics_selected=False):
         else:
             ready.append(family)
 
-    check("smoothness", None if action and roles & {"arm", "hand"} else ("pick the action array" if not action else "pick arm joints"))
-    check("idle and pause time", None if action and "arm" in roles else ("pick the action array" if not action else "pick arm joints"))
+    no_action = None if action else "pick the action array"
+    check("smoothness", no_action or (None if roles & {"arm", "hand"} else "pick arm joints"))
+    check("idle and pause time", no_action or (None if "arm" in roles else "pick arm joints"))
     if not (state and action):
         need = "pick the state and action arrays"
     elif p["action_semantics"] is None:

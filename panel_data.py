@@ -13,9 +13,6 @@ from .engine.metrics import METRICS
 from .engine.profiles import DEFAULT_PROFILE, GROUPS, PROFILES
 from .write import RUN_KEY
 
-SCORED_METRICS = [name for name, spec in METRICS.items() if spec["scored"]]
-
-
 def _num(value):
     if value is None:
         return None

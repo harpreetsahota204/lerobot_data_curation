@@ -6,6 +6,7 @@ by construction (see ``engine.score``), so the unit of work is the whole target
 view: scoring a filtered subset gives z-scores relative to that subset.
 """
 
+import json
 import logging
 import uuid
 from collections import Counter
@@ -111,6 +112,10 @@ def _duration(seconds):
     return "%d min" % round(seconds / 60.0)
 
 
+def _decode_time(n_cameras, n_episodes):
+    return _duration(n_cameras * n_episodes * SECONDS_PER_CAMERA)
+
+
 def camera_metric_names():
     return [name for name, spec in METRICS.items() if spec["family"] == "camera"]
 
@@ -167,7 +172,6 @@ def _action_layout(reader, sid, info, action_key):
         "dim": dim,
         "names": names,
         "usable": usable,
-        "cands": pk.candidate_groups(names) if usable else None,
         "bounds": reader.feature_bounds(sid, action_key),
     }
 
@@ -198,7 +202,7 @@ def _joint_dims(ctx, layout_choice, hands, layout, last_picks, action_key):
         dims = fallback[f["key"]]
         if f["key"] in gcfg:
             if layout["usable"]:
-                dims = pk.dims_from_chips(gcfg[f["key"]], layout["cands"], layout["dim"])
+                dims = pk.dims_from_names(gcfg[f["key"]], layout["names"])
             else:
                 dims, errs = pk.parse_dim_list(gcfg[f["key"]], layout["dim"])
                 errors += ["%s: %s" % (f["label"], e) for e in errs]
@@ -296,8 +300,8 @@ def _readiness_markdown(picks, camera_metrics_selected):
 
 
 def _joint_label(layout, d):
-    """A joint's chip label: its name and, when the dataset has stats, its observed range."""
-    label = layout["names"][d] if layout["usable"] else "dimension %d" % d
+    """A joint's choice label: its name and, when the dataset has stats, its observed range."""
+    label = str(layout["names"][d])
     bounds = layout.get("bounds")
     if bounds is not None and d < len(bounds[0]):
         label += " · %.3g to %.3g" % (bounds[0][d], bounds[1][d])
@@ -315,36 +319,91 @@ def _joint_field(gsec, f, layout, field_dims):
             description="%s Dimension numbers like '0-6' or '0-2, 5'." % f["help"],
         )
         return
-    others = {d for k, ds in field_dims.items() if k != f["key"] for d in ds}
-    choices = types.AutocompleteView(allow_user_input=False, allow_duplicates=False, filter_selected_options=True)
-    for c in layout["cands"]:
-        if len(c["dims"]) > 1 and not (set(c["dims"]) & others):
-            choices.add_choice(pk.GROUP_PREFIX + c["name"], label="%s (all %d joints)" % (c["name"], len(c["dims"])))
+    # A joint picked in any field leaves every field's list, so no joint can be in two fields.
+    taken = {d for ds in field_dims.values() for d in ds}
+    choices = types.AutocompleteView()
     for d in range(layout["dim"]):
-        if d not in others:
-            choices.add_choice(str(d), label=_joint_label(layout, d))
+        if d not in taken:
+            choices.add_choice(str(layout["names"][d]), label=_joint_label(layout, d))
     gsec.type.list(
-        f["key"], types.String(), default=pk.chips_for_dims(dims, layout["cands"]), view=choices,
+        f["key"], types.String(), default=pk.names_for_dims(dims, layout["names"]), view=choices,
         label=f["label"], description=f["help"],
     )
 
 
-def _metric_rows():
-    return [(name, spec) for name, spec in METRICS.items()]
+def _card_sx(subtitle):
+    """MUI ``sx`` that turns the App's collapsible ObjectView into a card: title and subtitle left, chevron right.
+
+    The App renders the section as ``container > div > [div[role=button] (chevron, title), div (content)]``
+    and has no subtitle slot, so the subtitle is drawn as the header's ``::after`` content.
+    """
+    header = "& > div > [role='button']"
+    content = header + " ~ div"
+    return {
+        "border": "1px solid rgba(255, 255, 255, 0.08)",
+        "borderRadius": "8px",
+        "backgroundColor": "#1f1f1f",
+        "overflow": "hidden",
+        header: {
+            "display": "grid !important",  # the App sets an inline display: flex on the header
+            "gridTemplateColumns": "1fr auto",
+            "columnGap": "12px",
+            "rowGap": "2px",
+            "padding": "12px 16px",
+            "cursor": "pointer",
+        },
+        header + ":hover": {"backgroundColor": "rgba(255, 255, 255, 0.04)"},
+        header + " > :first-child": {"gridColumn": "2", "gridRow": "1 / span 2", "alignSelf": "center"},
+        header + " > :last-child": {"gridColumn": "1", "gridRow": "1", "fontWeight": 500},
+        header + "::after": {
+            "content": json.dumps(subtitle, ensure_ascii=False),
+            "gridColumn": "1",
+            "gridRow": "2",
+            "fontSize": "0.8rem",
+            "color": "rgba(255, 255, 255, 0.55)",
+        },
+        # The App animates max-height 0 -> 2000px, so closing stalls and then snaps. Animate the real
+        # height instead (grid rows 0fr -> 1fr). Vertical padding goes on the inner items so it is
+        # clipped while closed; padding on the content itself would show while collapsed.
+        content: {
+            "display": "grid",
+            "gridTemplateRows": "0fr",
+            "maxHeight": "none !important",
+            "transition": "grid-template-rows 200ms ease-out !important",
+            "padding": "0 16px",
+        },
+        content + "[class*='contentOpen']": {"gridTemplateRows": "1fr"},
+        content + " > *": {"minHeight": 0, "overflow": "hidden"},
+        content + " > * > :last-child": {"paddingBottom": "12px"},
+    }
+
+
+def _metric_checkbox(section, name, spec, last):
+    section.type.bool(
+        "metric_%s" % name,
+        label="%s%s%s" % (name, " (opt-in)" if spec["opt_in"] else "", "" if spec["scored"] else " (not scored)"),
+        description=spec["description"],
+        default=_default_on(name, last.get("metrics")),
+        view=types.CheckboxView(),
+    )
 
 
 def _selected_metrics(ctx):
-    """The metrics ticked in the form. Camera metrics are ticked on their own tab."""
+    """The metrics ticked in the form. Camera metrics are ticked on their own tab.
+
+    The Metrics tab nests each family's checkboxes under its family key in ``metrics_cfg``.
+    """
     cfg = ctx.params.get("metrics_cfg") or {}
     camera = ctx.params.get("camera_cfg") or {}
     last = _last_run_config(ctx.dataset)
     has_cameras = bool(_picked_cameras(ctx, last.get("picks")))
     out = []
-    for name, spec in _metric_rows():
+    for name, spec in METRICS.items():
         if spec["family"] == "camera":
             ticked = camera.get("metric_%s" % name, _default_on(name, last.get("metrics"), has_cameras))
         else:
-            ticked = cfg.get("metric_%s" % name, _default_on(name, last.get("metrics")))
+            fam = cfg.get(spec["family"]) or {}
+            ticked = fam.get("metric_%s" % name, _default_on(name, last.get("metrics")))
         if ticked:
             out.append(name)
     return out
@@ -392,6 +451,7 @@ class ComputeQuality(foo.Operator):
         sid, info = _first_source(reader)
         facts = dataset_checks.declared_facts(info)
         last = _last_run_config(ctx.dataset)
+        hands = _wants_hands(ctx.params.get("robot_cfg") or {}, last.get("picks"))
 
         tabs = types.TabsView()
         tabs.add_choice("DATA", label="Data")
@@ -404,12 +464,11 @@ class ComputeQuality(foo.Operator):
         if tab == "DATA":
             inputs.md(_facts_line(reader), name="facts")
 
-            inputs.view("robot_header", types.Header(label="Robot"))
             rsec = inputs.obj("robot_cfg", view=types.GridView(orientation="vertical", gap=2))
-            _radio(rsec, "layout", pk.LAYOUTS, picks["layout"], "Arms")
+            _radio(rsec, "layout", pk.LAYOUTS, picks["layout"], "Arms", "Select how many arms the robot has.")
             rsec.type.bool(
                 "hands",
-                default=_wants_hands(ctx.params.get("robot_cfg") or {}, last.get("picks")),
+                default=hands,
                 label="Has multi-joint hands",
                 description="Adds a Hand field per arm. Leave off for an ordinary gripper.",
                 view=types.CheckboxView(),
@@ -462,7 +521,7 @@ class ComputeQuality(foo.Operator):
                         ),
                     )
                 gsec = inputs.obj("groups_cfg", view=types.GridView(orientation="vertical", gap=2))
-                fields = _shown_fields(picks["layout"], _wants_hands(ctx.params.get("robot_cfg") or {}, last.get("picks")))
+                fields = _shown_fields(picks["layout"], hands)
                 has_gripper = any(g["role"] == "gripper" for g in picks["groups"])
                 last_gripper = max((i for i, f in enumerate(fields) if f["role"] == "gripper"), default=None)
                 for i, f in enumerate(fields):
@@ -476,35 +535,27 @@ class ComputeQuality(foo.Operator):
                     inputs.view("joint_errors", types.Warning(label=" ".join(errors)))
         elif tab == "METRICS":
             section = inputs.obj("metrics_cfg", view=types.GridView(orientation="vertical", gap=2))
-            seen = []
-            for name, spec in _metric_rows():
+            ticked = set(_selected_metrics(ctx))
+            by_family = {}
+            for name, spec in METRICS.items():
                 if spec["fn"] is None and spec["family"] != "outliers":
                     continue
                 if spec["family"] == "camera":
                     continue  # on the Camera tab
-                if spec["family"] not in seen:
-                    if seen:
-                        section.type.md("---", name="rule_%s" % spec["family"])
-                    seen.append(spec["family"])
-                    section.type.view(
-                        "header_%s" % spec["family"],
-                        types.Header(
-                            label=FAMILY_LABELS.get(spec["family"], spec["family"].title()),
-                            description=FAMILY_HELP.get(spec["family"]),
-                        ),
-                    )
-                section.type.bool(
-                    "metric_%s" % name,
-                    label="%s%s%s"
-                    % (
-                        name,
-                        " (opt-in)" if spec["opt_in"] else "",
-                        "" if spec["scored"] else " (not scored)",
+                by_family.setdefault(spec["family"], []).append((name, spec))
+            for family, rows in by_family.items():
+                n_on = sum(name in ticked for name, _ in rows)
+                fam = section.type.obj(
+                    family,
+                    view=types.ObjectView(
+                        collapsible=True,
+                        default_expanded=False,
+                        label="%s · %d of %d selected" % (FAMILY_LABELS.get(family, family.title()), n_on, len(rows)),
+                        componentsProps={"container": {"sx": _card_sx(FAMILY_HELP.get(family, ""))}},
                     ),
-                    description=spec["description"],
-                    default=_default_on(name, last.get("metrics")),
-                    view=types.CheckboxView(),
                 )
+                for name, spec in rows:
+                    _metric_checkbox(fam, name, spec, last)
         elif tab == "CAMERA":
             section = inputs.obj("camera_cfg", view=types.GridView(orientation="vertical", gap=2))
             choices = types.AutocompleteView()
@@ -520,7 +571,7 @@ class ComputeQuality(foo.Operator):
             )
             n_cam = len(picks["cameras"])
             inputs.md(
-                "Decoding takes about %s for %d camera(s) over %d episode(s)." % (_duration(n_cam * len(view) * SECONDS_PER_CAMERA), n_cam, len(view))
+                "Decoding takes about %s for %d camera(s) over %d episode(s)." % (_decode_time(n_cam, len(view)), n_cam, len(view))
                 if n_cam
                 else "No camera is picked, so the camera metrics will not run.",
                 name="camera_estimate",
@@ -563,7 +614,7 @@ class ComputeQuality(foo.Operator):
                 % (
                     len(view),
                     len(selected),
-                    " (camera metrics: about %s)" % _duration(len(picks["cameras"]) * len(view) * SECONDS_PER_CAMERA)
+                    " (camera metrics: about %s)" % _decode_time(len(picks["cameras"]), len(view))
                     if has_camera and picks["cameras"]
                     else "",
                     pooled,

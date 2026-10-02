@@ -299,11 +299,6 @@ METRICS = {
 }
 
 
-def default_metric_names():
-    """Metrics that run unless the user turns them off."""
-    return [name for name, s in METRICS.items() if not s["opt_in"]]
-
-
 def required_arrays_present(metric_spec, episode):
     """Whether the episode has every array the metric needs."""
     for name in metric_spec["requires"]:
